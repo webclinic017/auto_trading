@@ -50,6 +50,7 @@ class KiwoomWorld(QAxWidget):
             - PyQt5.QAxContainer.py 안 QAxWidget 클래스 내부 메서드
 
         - "KFOPENAPI.KFOpenAPICtrl.1"
+        - "KHOPENAPI.KHOpenAPICtrl.1"
             - 키움증권 웹 사이트에 접속하여 Open API를 설치하면 우리 컴퓨터에 설치되는 API 식별자 (프로그램 ID / ProgID)
             - Open API를 설치한 컴퓨터라면 레지스트리에 모두 동일한 이름으로 저장
         - 해외랑 국내랑 다름!!
@@ -68,19 +69,20 @@ class KiwoomWorld(QAxWidget):
         # 로그인 응답의 결과를 _on_login_connect을 통해 받도록 설정 # _comm_connect
         self.OnEventConnect.connect(self._login_slot)
 
+        #
         # TR의 응답 결과를 _on_receive_tr_data 함수를 통해 받도록 설정
         self.OnReceiveTrData.connect(self._on_receive_tr_data)
 
         # TR/주문 메시지를 _on_receive_msg을 통해 받도록 설정
         self.OnReceiveMsg.connect(self._on_receive_msg)
-
-        # 주문 접수/체결 결과를 _on_chejan_slot을 통해 받도록 설정
-        self.OnReceiveChejanData.connect(self._on_chejan_slot)
-
-        # 실시간 체결 데이터를 _on_receive_real_data을 통해 받도록 설정
-            # SetRealReg() 함수로 등록한 실시간 데이터도 이 이벤트로 전달됩니다.
-            # GetCommRealData() 함수를 사용해서 수신된 데이터를 얻을 수 있습니다.
-        self.OnReceiveRealData.connect(self._on_receive_real_data)
+        #
+        # # 주문 접수/체결 결과를 _on_chejan_slot을 통해 받도록 설정
+        # self.OnReceiveChejanData.connect(self._on_chejan_slot)
+        #
+        # # 실시간 체결 데이터를 _on_receive_real_data을 통해 받도록 설정
+        #     # SetRealReg() 함수로 등록한 실시간 데이터도 이 이벤트로 전달됩니다.
+        #     # GetCommRealData() 함수를 사용해서 수신된 데이터를 얻을 수 있습니다.
+        # self.OnReceiveRealData.connect(self._on_receive_real_data)
 
     def _login_slot(self, err_code):
         """
@@ -107,8 +109,13 @@ class KiwoomWorld(QAxWidget):
                 - "CommConnect()"
                     - API 에서 제공하는 함수
                     - 키움증권 로그인 화면을 팝업하는 기능
+            입력값  0 – 버전 수동처리, 1 – 버전 자동처리
+                *로그인창 및 OCX 파일을 버전처리 받는 경우에,
+                수동처리시, 고객 프로그램(ocx포함)을 직접 수동으로 Close하고 버전처리 진행
+                자동처리시, 고객 프로그램(ocx포함)을 자동으로 Close하고 버전처리 및 자동
+                재실행을 함.
         """
-        self.dynamicCall("CommConnect()")
+        self.dynamicCall("CommConnect(1)")
 
         # 동기화 처리를 위함 (로그인 될 때까지 기다리기)
         self.login_event_loop = QEventLoop()

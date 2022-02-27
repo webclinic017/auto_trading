@@ -54,7 +54,6 @@ class Kiwoom(QAxWidget):
             - Open API를 설치한 컴퓨터라면 레지스트리에 모두 동일한 이름으로 저장
         """
         self.setControl("KHOPENAPI.KHOpenAPICtrl.1")
-
     def _set_signal_slots(self):
         """
         - Objectives
