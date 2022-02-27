@@ -1,4 +1,4 @@
-from strategy.RSIStrategy import *
+from strategy.rsi_strategy import *
 import sys
 
 app = QApplication(sys.argv)

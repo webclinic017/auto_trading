@@ -6,7 +6,7 @@ def check_table_exist(db_name, table_name):
     - Objectives
         - db_name에 table_name이 있는지 확인합니다.
         - 예시
-            - db_name: RSIStrategy
+            - db_name: RSIStrategy / ComprehensiveDualMomentumStrategy
             - talbe_name: universe
     """
     with sqlite3.connect('{}.db'.format(db_name)) as con:

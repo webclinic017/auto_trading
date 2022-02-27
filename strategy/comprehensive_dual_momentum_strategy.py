@@ -1,5 +1,6 @@
 from api.Kiwoom import *
-from util.make_up_universe import *
+from api.KiwoomWorld import *
+from universe.comprehensive_dual_momentum_universe import *
 from util.db_helper import *
 from util.time_helper import *
 from util.notifier import *
@@ -7,11 +8,12 @@ import math
 import traceback
 
 
-class RSIStrategy(QThread):
+class ComprehensiveDualMomentumSrategy(QThread):
     def __init__(self):
         QThread.__init__(self)
-        self.strategy_name = "RSIStrategy"
+        self.strategy_name = "ComprehensiveDualMomentumStrategy"
         self.kiwoom = Kiwoom()
+        self.kiwoom_world = KiwoomWorld()
 
         # 유니버스 정보를 담을 딕셔너리
         self.universe = {}
@@ -59,7 +61,7 @@ class RSIStrategy(QThread):
 
     def check_and_get_universe(self):
         """유니버스가 존재하는지 확인하고 없으면 생성하는 함수"""
-        if not check_table_exist(self.strategy_name, 'universe'):
+        if not check_table_exist(self.strategy_name, 'universe'): # ComprehensiveDualMomentumStrategy
             # RSIStrategy db 내에 'universe' 테이블이 없으면
             universe_list = get_universe()
             print(universe_list)
