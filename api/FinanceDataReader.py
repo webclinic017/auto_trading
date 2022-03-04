@@ -4,34 +4,27 @@ from PyQt5.QtCore import *
 import time
 import pandas as pd
 from util.const import *
+import FinanceDataReader as fdr
 """
 - PyQt
-    - KiwoomWorld API 는 ActiveX Control인 OCX 방식으로 API 연결을 제공
+    - FinanceDataReader API 는 ActiveX Control인 OCX 방식으로 API 연결을 제공
     - 우리도 OCX 방식으로 API를 이용해야 함
         - OCX
             - OLE(Object Linking and Embedding) 을 제어할 수 있는 controller
             - 응용 프로그램끼리 데이터를 공유하고 제어할 수 있도록 개발한 기술
 """
 
-class KiwoomWorld(QAxWidget):
+class FinanceDataReader:
     def __init__(self):
         """
         - QAxWidget
             - open API 를 사용할 수 있도록 연결
         """
         super().__init__()
-        # 우리 컴퓨터에서 키움 API 를 사용할 수 있도록 설정
-        self._make_kiwoom_instance()
         # API로 보내는 요청들을 받아올 slot을 등록하는 함수
-        self._set_signal_slots()
-        # 로그인 요청 보내기
-        self._comm_connect()
         # 내 계좌 번호 받아오기 -> self.account_number
         # self.account_number = self.get_account_number()
-
         # tr 요청에 대한 응답 대기를 위한 변수
-        self.tr_event_loop = QEventLoop()
-
         # 키: 종목 코드 / 값: 해당 종목의 주문 정보
         self.order = {}
         # 키: 종목 코드 / 값: 해당 종목의 매수 정보
@@ -39,6 +32,8 @@ class KiwoomWorld(QAxWidget):
         # 실시간 채결 정보를 저장할 딕셔너리
         # 키: 종목 코드 / 값: 해당 종목의 정보
         self.universe_realtime_transaction_info = {}
+        nasdaq_code_list = self.get_df_list_by_market('NASDAQ')
+        kospi_code_list = self.get_df_list_by_market('NYSE')
 
     def _make_kiwoom_instance(self):
         """
@@ -56,32 +51,6 @@ class KiwoomWorld(QAxWidget):
         """
         self.setControl("KFOPENAPI.KFOpenAPICtrl.1")
 
-    def _set_signal_slots(self):
-        """
-        - Objectives
-            - API로 보내는 요청들을 받아올 slot을 등록하는 함수
-        - 로그인
-            - OnEventConnect.connect
-                - 로그인 응답 처리를 받을 때 사용하는 slot 함수는 _login_slot 이다.
-
-        """
-        # 로그인 응답의 결과를 _on_login_connect을 통해 받도록 설정 # _comm_connect
-        self.OnEventConnect.connect(self._login_slot)
-
-        # TR의 응답 결과를 _on_receive_tr_data 함수를 통해 받도록 설정
-        self.OnReceiveTrData.connect(self._on_receive_tr_data)
-
-        # TR/주문 메시지를 _on_receive_msg을 통해 받도록 설정
-        self.OnReceiveMsg.connect(self._on_receive_msg)
-
-        # 주문 접수/체결 결과를 _on_chejan_slot을 통해 받도록 설정
-        self.OnReceiveChejanData.connect(self._on_chejan_slot)
-
-        # 실시간 체결 데이터를 _on_receive_real_data을 통해 받도록 설정
-            # SetRealReg() 함수로 등록한 실시간 데이터도 이 이벤트로 전달됩니다.
-            # GetCommRealData() 함수를 사용해서 수신된 데이터를 얻을 수 있습니다.
-        self.OnReceiveRealData.connect(self._on_receive_real_data)
-
     def _login_slot(self, err_code):
         """
         :param err_code:
@@ -95,24 +64,6 @@ class KiwoomWorld(QAxWidget):
             print("not connected")
 
         self.login_event_loop.exit()
-
-    def _comm_connect(self):
-        """
-        - Objectives
-            - 로그인 요청 신호를 보낸 이후, 응답 대기를 설정하는 함수
-
-            - dynamicCall
-                - PyQt5.QAxContainer.py 안 QAxWidget 클래스 내부 메서드
-                - API 서버로 로그인 요청을 보냄
-                - "CommConnect()"
-                    - API 에서 제공하는 함수
-                    - 키움증권 로그인 화면을 팝업하는 기능
-        """
-        self.dynamicCall("CommConnect()")
-
-        # 동기화 처리를 위함 (로그인 될 때까지 기다리기)
-        self.login_event_loop = QEventLoop()
-        self.login_event_loop.exec_()
 
     def get_account_number(self, tag="ACCNO"):
         """
@@ -135,31 +86,11 @@ class KiwoomWorld(QAxWidget):
         print('account_number:', account_number)
         return account_number
 
-    def get_code_list_by_market(self, market_type):
-        """
-        Objectives
-            - 특정 market의 code list를 받는다.
-        # TODO: market_type 을 바꿔가며 전략을 만들자.
-        Parameter: market_type("_")
-            - 0: 코스피
-            - 10: 코스닥
-            - 3: ELW
-            - 8: ETF
-            - 50: KONEX
-            - 4: 뮤츄얼 펀드
-            - 5: 신주인수권
-            - 6: 리츠
-            - 9: 하이얼펀드
-            - 30: K-OTC
-        """
-        code_list = self.dynamicCall("GetCodeListByMarket(QString)", market_type)
-        code_list = code_list.split(';')[:-1]
-        return code_list
-
     def get_master_code_name(self, code):
         """
         Objectives
             - 특정 code의 종목명을 받는다.
+            - 종목명을 그냥 입력해도 될듯함
         """
         code_name = self.dynamicCall("GetMasterCodeName(QString)", code)
         return code_name
@@ -169,6 +100,8 @@ class KiwoomWorld(QAxWidget):
         Objectives
             - 종목의 상장일부터 가장 최근 일자까지 일봉 정보를 가져오는 함수
             - TODO: "기준 일자" 를 이용하여, 주식 상장일 ~ 기준 일자 의 데이터를 받아올 수도 있다.
+            - TODO: 가격 정보가 적혀있는 excel 데이터로 불러오기
+            - TODO: 어떻게 하면, 최신 데이터를 불러올 수 있을까?
         """
         self.dynamicCall("SetInputValue(QString, QString)", "종목코드", code)
         self.dynamicCall("SetInputValue(QString, QString)", "기준일자", date)
@@ -212,7 +145,7 @@ class KiwoomWorld(QAxWidget):
             - next: 연속 조회 유무를 판단하는 값 ( 0: 연속(추가 조회) 데이터 없음 / 2: 연속(추가 조회) 데이터 있음 )
             - unused1, unused2, unused3, unused4
         """
-        print("[KiwoomWorld] _on_receive_tr_data is called {} / {} / {}".format(screen_no, rqname, trcode))
+        print("[FinanceDataReader] _on_receive_tr_data is called {} / {} / {}".format(screen_no, rqname, trcode))
         # 이번 요청에서 받아 온 데이터 개수(tr_data_cnt) 확인 요청
         tr_data_cnt = self.dynamicCall("GetRepeatCnt(QString, QString)", trcode, rqname)
 
@@ -339,20 +272,6 @@ class KiwoomWorld(QAxWidget):
         # 0.2초에 한번 데이터를 요청할 수 있지만, 여기서는 여유 있게 0.5초의 대기 시잔을 두었다.
         time.sleep(0.5)
 
-    def get_deposit(self):
-        """
-        Objectives
-            - 조회 대상 계좌의 예수금을 얻어오는 함수
-        """
-        self.dynamicCall("SetInputValue(QString, QString)", "계좌번호", self.account_number)
-        self.dynamicCall("SetInputValue(QString, QString)", "비밀번호입력매체구분", "00")
-        self.dynamicCall("SetInputValue(QString, QString)", "조회구분", "2") # 2: 일반조회 / 3: 추정조회
-        # 사용자 구분 명 / TR 이름 / 연속 조회 여부 = 0 / 화면 번호
-        self.dynamicCall("CommRqData(QString, QString, int, QString)", "opw00001_req", "opw00001", 0, "0002")
-        # 코드 응답을 대기
-        self.tr_event_loop.exec_()
-        return self.tr_data
-
     def send_order(self, rqname, screen_no, order_type, code, order_quantity, order_price, order_classification, origin_order_number=""):
         """
         # rqname: send_buy_order: rqname
@@ -389,7 +308,36 @@ class KiwoomWorld(QAxWidget):
             - TR 조희 응답 및 주문에 대한 메시지를 수신
             - 입력 값 오류 / 주문 전송 시 거부 사유 등을 확인 가능
         """
-        print("[KiwoomWorld] _on_receive_msg is called {} / {} / {} / {}".format(screen_no, rqname, trcode, msg))
+        print("[FinanceDataReader] _on_receive_msg is called {} / {} / {} / {}".format(screen_no, rqname, trcode, msg))
+
+    def get_df_list_by_market(self, market_type):
+        """
+        Objectives
+            - 특정 market의 code list를 받는다.
+        # TODO: market_type 을 바꿔가며 전략을 만들자.
+        Parameter: market_type("_")
+            - KRX
+            - KOSPI
+            - KOSDAQ
+            - NASDAQ
+            - NYSE: 뉴욕 증권거래소 종목
+            - AMEX
+            - SP500
+
+
+            - KS11 : KOSPI 지수
+            - KQ11: KOSDAQ 지수
+            - DJI : 다우존스 지수
+            - IXIC: 나스닥 종합 지수
+            - US500: S&P 500 지수
+            -
+        """
+        if not isinstance(market_type, str):
+            market_type = str(market_type)
+        df_market = fdr.StockListing(market_type)
+        df_market.head()
+        return df_market
+
 
     def _on_chejan_slot(self, s_gubun, n_item_cnt, s_fid_list):
         """
@@ -409,7 +357,7 @@ class KiwoomWorld(QAxWidget):
         Objectives
             - 주문 전송 후, 주문 접수 / 채결 통보 / 잔고 통보를 수신할 때마다 발생 합니다.
         """
-        print("[KiwoomWorld] _on_chejan_slot is called {} / {} / {}".format(s_gubun, n_item_cnt, s_fid_list))
+        print("[FinanceDataReader] _on_chejan_slot is called {} / {} / {}".format(s_gubun, n_item_cnt, s_fid_list))
 
         # 9201;9203;9205;9001;912;913;302;900;901;처럼 전달되는 fid 리스트를 ';' 기준으로 구분함
         for fid in s_fid_list.split(";"):
@@ -458,33 +406,6 @@ class KiwoomWorld(QAxWidget):
         elif int(s_gubun) == 1:
             print("* 잔고 출력(self.balance)")
             print(self.balance)
-
-    def get_order(self):
-        """
-        Objectives
-         - 주문 정보를 불러 오는 함수
-        """
-        self.dynamicCall("SetInputValue(QString, QString)", "계좌번호", self.account_number)
-        self.dynamicCall("SetInputValue(QString, QString)", "전체종목구분", "0")
-        self.dynamicCall("SetInputValue(QString, QString)", "체결구분", "0")  # 0:전체, 1:미체결, 2:체결
-        self.dynamicCall("SetInputValue(QString, QString)", "매매구분", "0")  # 0:전체, 1:매도, 2:매수
-        self.dynamicCall("CommRqData(QString, QString, int, QString)", "opt10075_req", "opt10075", 0, "0002")
-        # 응답 대기 상태
-        self.tr_event_loop.exec_()
-        return self.tr_data
-
-    def get_balance(self):
-        """
-        Objectives
-            - 잔고 얻어 오기 (구매한 종목들 확인)
-        """
-        self.dynamicCall("SetInputValue(QString, QString)", "계좌번호", self.account_number)
-        self.dynamicCall("SetInputValue(QString, QString)", "비밀번호입력매체구분", "00")
-        self.dynamicCall("SetInputValue(QString, QString)", "조회구분", "1") # 1: 합산 # 2: 개별
-        self.dynamicCall("CommRqData(QString, QString, int, QString)", "opw00018_req", "opw00018", 0, "0002")
-
-        self.tr_event_loop.exec_()
-        return self.tr_data
 
     def set_real_reg(self, str_screen_no, str_code_list, str_fid_list, str_opt_type):
         """

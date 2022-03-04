@@ -107,14 +107,20 @@ def get_universe():
             - KODEX 미국 S&P 선물 (15%) : 2219480
             - VT (15%):
         - 채권
-            - EDV (20%)
-            - TIGER 미국채 10년 선물 (35%) : 305080
+            - EDV (35%)
+            - TIGER 미국채 10년 선물 (20%) : 305080
         - 실물자산
             - IAU (5%)
             - VNQ (5%)
             - BCI (5%)
     """
-    universe_list = ['KODEX 미국S&P500선물(H)', 'TIGER 미국채10년선물']
+    korea_universe_dict = {'주식': {'KODEX 미국S&P500선물(H)': 0.15},
+                           '채권': {'TIGER 미국채10년선물': 0.2},
+                           '실물자산':{}}
+    abroad_universe_dict = {'주식': {'VT': 0.15},
+                            '채권': {'EDV': 0.35},
+                            '실물자산':{'IAU': 0.05, 'VNQ': 0.05, 'BCI': 0.05}}
+    return korea_universe_dict, abroad_universe_dict
     # # 크롤링 결과를 얻어옴
     # df = execute_crawler() # return 값 형태는 pandas dataframe
     #

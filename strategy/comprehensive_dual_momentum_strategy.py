@@ -1,5 +1,6 @@
 from api.Kiwoom import *
 from api.KiwoomWorld import *
+from api.FinanceDataReader import *
 from universe.comprehensive_dual_momentum_universe import *
 from util.db_helper import *
 from util.time_helper import *
@@ -13,7 +14,8 @@ class ComprehensiveDualMomentumSrategy(QThread):
         QThread.__init__(self)
         self.strategy_name = "ComprehensiveDualMomentumStrategy"
         self.kiwoom = Kiwoom()
-        self.kiwoom_world = KiwoomWorld()
+        self.finance_data_reader = FinanceDataReader()
+
 
         # 유니버스 정보를 담을 딕셔너리
         self.universe = {}
@@ -62,9 +64,11 @@ class ComprehensiveDualMomentumSrategy(QThread):
     def check_and_get_universe(self):
         """유니버스가 존재하는지 확인하고 없으면 생성하는 함수"""
         if not check_table_exist(self.strategy_name, 'universe'): # ComprehensiveDualMomentumStrategy
-            # RSIStrategy db 내에 'universe' 테이블이 없으면
-            universe_list = get_universe()
-            print(universe_list)
+            # ComprehensiveDualMomentumStrategy db 내에 'universe' 테이블이 없으면
+            korea_universe_dict, abroad_universe_dict = get_universe()
+            print('------나의 유니버스를 공개하지!------')
+            print('korea_universe_dict:', korea_universe_dict)
+            print('abroad_universe_dict:', abroad_universe_dict)
             universe = {} # {'code': code_name , ... }
             # 오늘 날짜를 20210101 형태로 지정
             now = datetime.now().strftime("%Y%m%d")
