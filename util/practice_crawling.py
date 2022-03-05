@@ -61,9 +61,7 @@ def crawler(code, page):
     global fields
 
     # Naver fimance에 전달할 값들 세팅(요청을 보낼 때는 menu, fieldIds, returnUrl을 지정해서 보내야 함)
-    data = {'menu': 'market_sum',
-            'fieldIds': fields,
-            'returnUrl': BASE_URL + str(code) + "&page=" + str(page)}
+    data = {'menu': 'market_sum', 'fieldIds': fields, 'returnUrl': BASE_URL + str(code) + "&page=" + str(page)}
 
     # 네이버로 요청을 전달(post방식)
     res = requests.post('https://finance.naver.com/sise/field_submit.nhn', data=data)
@@ -77,12 +75,11 @@ def crawler(code, page):
     header_data = [item.get_text().strip() for item in table_html.select('thead th')][1:-1]
 
     # 종목명 + 수치 추출 (a.title = 종목명, td.number = 기타 수치)
-    inner_data = [item.get_text().strip() for item in table_html.find_all(lambda x:
-                                                                          (x.name == 'a' and
-                                                                           'tltle' in x.get('class', [])) or
-                                                                          (x.name == 'td' and
-                                                                           'number' in x.get('class', []))
-                                                                          )]
+    inner_data = [
+        item.get_text().strip()
+        for item in table_html.find_all(lambda x: (x.name == 'a' and 'tltle' in x.get('class', [])) or
+                                        (x.name == 'td' and 'number' in x.get('class', [])))
+    ]
 
     # page마다 있는 종목의 순번 가져오기
     no_data = [item.get_text().strip() for item in table_html.select('td.no')]

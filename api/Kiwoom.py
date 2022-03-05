@@ -4,6 +4,8 @@ from PyQt5.QtCore import *
 import time
 import pandas as pd
 from util.const import *
+from util.db_helper import *
+from util.time_helper import *
 """
 - PyQt
     - Kiwoom API 는 ActiveX Control인 OCX 방식으로 API 연결을 제공
@@ -13,7 +15,9 @@ from util.const import *
             - 응용 프로그램끼리 데이터를 공유하고 제어할 수 있도록 개발한 기술
 """
 
+
 class Kiwoom(QAxWidget):
+
     def __init__(self):
         """
         - QAxWidget
@@ -54,6 +58,7 @@ class Kiwoom(QAxWidget):
             - Open API를 설치한 컴퓨터라면 레지스트리에 모두 동일한 이름으로 저장
         """
         self.setControl("KHOPENAPI.KHOpenAPICtrl.1")
+
     def _set_signal_slots(self):
         """
         - Objectives
@@ -76,8 +81,8 @@ class Kiwoom(QAxWidget):
         self.OnReceiveChejanData.connect(self._on_chejan_slot)
 
         # 실시간 체결 데이터를 _on_receive_real_data을 통해 받도록 설정
-            # SetRealReg() 함수로 등록한 실시간 데이터도 이 이벤트로 전달됩니다.
-            # GetCommRealData() 함수를 사용해서 수신된 데이터를 얻을 수 있습니다.
+        # SetRealReg() 함수로 등록한 실시간 데이터도 이 이벤트로 전달됩니다.
+        # GetCommRealData() 함수를 사용해서 수신된 데이터를 얻을 수 있습니다.
         self.OnReceiveRealData.connect(self._on_receive_real_data)
 
     def _login_slot(self, err_code):
@@ -122,7 +127,7 @@ class Kiwoom(QAxWidget):
                 - "FIREW_SECGB" : 방화벽 설정 여부 반환 (0: 미설정 / 1: 설정 / 2: 해지)
         """
         account_list = self.dynamicCall("GetLoginInfo(QString)", tag)  # tag로 전달한 요청에 대한 응답을 받아옴
-        account_number = account_list.split(';')[0] # TODO: 국내 가상 계좌만 있다고 가장한 코드
+        account_number = account_list.split(';')[0]  # TODO: 국내 가상 계좌만 있다고 가장한 코드
         print('account_list:', account_list)
         print('account_number:', account_number)
         return account_number
@@ -183,14 +188,14 @@ class Kiwoom(QAxWidget):
             self.tr_event_loop.exec_()
 
             for key, val in self.tr_data.items():
-                ohlcv[key] += val # ohlcv[key][-1:] = val
+                ohlcv[key] += val  # ohlcv[key][-1:] = val
         """
         DataFrame
             - 행과 열을 가진 자료 구조
         """
         df = pd.DataFrame(ohlcv, columns=['open', 'high', 'low', 'close', 'volume'], index=ohlcv['date'])
 
-        return df[::-1] # 날짜 뒤집기
+        return df[::-1]  # 날짜 뒤집기
 
     def _on_receive_tr_data(self, screen_no, rqname, trcode, record_name, next, unused1, unused2, unused3, unused4):
         """
@@ -241,17 +246,20 @@ class Kiwoom(QAxWidget):
         # 오늘 주문 정보 불러오기 (다음 장 거래 시작일 전까지 유효)
         # get_order
         elif rqname == "opt10075_req":
-            for i in range(tr_data_cnt): # tr_data_cnt: 데이터 개수
+            for i in range(tr_data_cnt):  # tr_data_cnt: 데이터 개수
                 code = self.dynamicCall("GetCommData(QString, QString, int, QString", trcode, rqname, i, "종목코드")
                 code_name = self.dynamicCall("GetCommData(QString, QString, int, QString", trcode, rqname, i, "종목명")
                 order_number = self.dynamicCall("GetCommData(QString, QString, int, QString", trcode, rqname, i, "주문번호")
                 order_status = self.dynamicCall("GetCommData(QString, QString, int, QString", trcode, rqname, i, "주문상태")
-                order_quantity = self.dynamicCall("GetCommData(QString, QString, int, QString", trcode, rqname, i, "주문수량")
+                order_quantity = self.dynamicCall("GetCommData(QString, QString, int, QString", trcode, rqname, i,
+                                                  "주문수량")
                 order_price = self.dynamicCall("GetCommData(QString, QString, int, QString", trcode, rqname, i, "주문가격")
                 current_price = self.dynamicCall("GetCommData(QString, QString, int, QString", trcode, rqname, i, "현재가")
                 order_type = self.dynamicCall("GetCommData(QString, QString, int, QString", trcode, rqname, i, "주문구분")
-                left_quantity = self.dynamicCall("GetCommData(QString, QString, int, QString", trcode, rqname, i, "미체결수량")
-                executed_quantity = self.dynamicCall("GetCommData(QString, QString, int, QString", trcode, rqname, i, "체결량")
+                left_quantity = self.dynamicCall("GetCommData(QString, QString, int, QString", trcode, rqname, i,
+                                                 "미체결수량")
+                executed_quantity = self.dynamicCall("GetCommData(QString, QString, int, QString", trcode, rqname, i,
+                                                     "체결량")
                 ordered_at = self.dynamicCall("GetCommData(QString, QString, int, QString", trcode, rqname, i, "시간")
                 fee = self.dynamicCall("GetCommData(QString, QString, int, QString", trcode, rqname, i, "당일매매수수료")
                 tax = self.dynamicCall("GetCommData(QString, QString, int, QString", trcode, rqname, i, "당일매매세금")
@@ -297,11 +305,15 @@ class Kiwoom(QAxWidget):
                 code = self.dynamicCall("GetCommData(QString, QString, int, QString", trcode, rqname, i, "종목번호")
                 code_name = self.dynamicCall("GetCommData(QString, QString, int, QString", trcode, rqname, i, "종목명")
                 quantity = self.dynamicCall("GetCommData(QString, QString, int, QString", trcode, rqname, i, "보유수량")
-                purchase_price = self.dynamicCall("GetCommData(QString, QString, int, QString", trcode, rqname, i, "매입가")
-                return_rate = self.dynamicCall("GetCommData(QString, QString, int, QString", trcode, rqname, i, "수익률(%)")
+                purchase_price = self.dynamicCall("GetCommData(QString, QString, int, QString", trcode, rqname, i,
+                                                  "매입가")
+                return_rate = self.dynamicCall("GetCommData(QString, QString, int, QString", trcode, rqname, i,
+                                               "수익률(%)")
                 current_price = self.dynamicCall("GetCommData(QString, QString, int, QString", trcode, rqname, i, "현재가")
-                total_purchase_price = self.dynamicCall("GetCommData(QString, QString, int, QString", trcode, rqname, i,"매입금액")
-                available_quantity = self.dynamicCall("GetCommData(QString, QString, int, QString", trcode, rqname, i,"매매가능수량")
+                total_purchase_price = self.dynamicCall("GetCommData(QString, QString, int, QString", trcode, rqname, i,
+                                                        "매입금액")
+                available_quantity = self.dynamicCall("GetCommData(QString, QString, int, QString", trcode, rqname, i,
+                                                      "매매가능수량")
 
                 # 데이터 형변환 및 가공
                 code = code.strip()[1:]
@@ -338,14 +350,22 @@ class Kiwoom(QAxWidget):
         """
         self.dynamicCall("SetInputValue(QString, QString)", "계좌번호", self.account_number)
         self.dynamicCall("SetInputValue(QString, QString)", "비밀번호입력매체구분", "00")
-        self.dynamicCall("SetInputValue(QString, QString)", "조회구분", "2") # 2: 일반조회 / 3: 추정조회
+        self.dynamicCall("SetInputValue(QString, QString)", "조회구분", "2")  # 2: 일반조회 / 3: 추정조회
         # 사용자 구분 명 / TR 이름 / 연속 조회 여부 = 0 / 화면 번호
         self.dynamicCall("CommRqData(QString, QString, int, QString)", "opw00001_req", "opw00001", 0, "0002")
         # 코드 응답을 대기
         self.tr_event_loop.exec_()
         return self.tr_data
 
-    def send_order(self, rqname, screen_no, order_type, code, order_quantity, order_price, order_classification, origin_order_number=""):
+    def send_order(self,
+                   rqname,
+                   screen_no,
+                   order_type,
+                   code,
+                   order_quantity,
+                   order_price,
+                   order_classification,
+                   origin_order_number=""):
         """
         # rqname: send_buy_order: rqname
         # screen_no: '1001' : 화면 번호
@@ -372,7 +392,11 @@ class Kiwoom(QAxWidget):
             - OnReceiveChejanData: 주문 접수/체결
             - OnReceiveTrData
         """
-        order_result = self.dynamicCall("SendOrder(QString, QString, QString, int, QString, int, int, QString, QString)",[rqname, screen_no, self.account_number, order_type, code, order_quantity, order_price,order_classification, origin_order_number])
+        order_result = self.dynamicCall(
+            "SendOrder(QString, QString, QString, int, QString, int, int, QString, QString)", [
+                rqname, screen_no, self.account_number, order_type, code, order_quantity, order_price,
+                order_classification, origin_order_number
+            ])
         return order_result
 
     def _on_receive_msg(self, screen_no, rqname, trcode, msg):
@@ -416,7 +440,7 @@ class Kiwoom(QAxWidget):
                 data = data.strip().lstrip('+').lstrip('-')
 
                 # 수신한 데이터는 전부 문자형인데 문자형 중에 숫자인 항목들(ex:매수가)은 숫자로 변형이 필요함
-                if data.isdigit(): # 문자열이 숫자로 구성되어 있는지 확인합니다.
+                if data.isdigit():  # 문자열이 숫자로 구성되어 있는지 확인합니다.
                     data = int(data)
 
                 # fid 코드에 해당하는 항목(item_name)을 찾음(ex: fid=9201 > item_name=계좌번호)
@@ -428,7 +452,7 @@ class Kiwoom(QAxWidget):
                 # 접수/체결(s_gubun=0)이면 self.order, 잔고이동이면 self.balance에 값을 저장
                 if int(s_gubun) == 0:
                     # 아직 order에 종목코드가 없다면 신규 생성하는 과정
-                    if code not in self.order.keys(): # # 키: 종목 코드 / 값: 해당 종목의 주문 정보
+                    if code not in self.order.keys():  # # 키: 종목 코드 / 값: 해당 종목의 주문 정보
                         self.order[code] = {}
                     # order 딕셔너리에 데이터 저장
                     # {'007700': {주문가: '~~', '주문 번호': '~~' , 주문 상태: '~~', 미체결 수량" '~~'}, ...}
@@ -472,7 +496,7 @@ class Kiwoom(QAxWidget):
         """
         self.dynamicCall("SetInputValue(QString, QString)", "계좌번호", self.account_number)
         self.dynamicCall("SetInputValue(QString, QString)", "비밀번호입력매체구분", "00")
-        self.dynamicCall("SetInputValue(QString, QString)", "조회구분", "1") # 1: 합산 # 2: 개별
+        self.dynamicCall("SetInputValue(QString, QString)", "조회구분", "1")  # 1: 합산 # 2: 개별
         self.dynamicCall("CommRqData(QString, QString, int, QString)", "opw00018_req", "opw00018", 0, "0002")
 
         self.tr_event_loop.exec_()
@@ -494,8 +518,9 @@ class Kiwoom(QAxWidget):
             - 한 번에 등록 가능한 종목과 FID 개수는 100종목, 100개 입니다.
 
         """
-        self.dynamicCall("SetRealReg(QString, QString, QString, QString)", str_screen_no, str_code_list, str_fid_list, str_opt_type)
-        time.sleep(0.5) # 요청 제한이 있기 때문에 딜레이를 줌
+        self.dynamicCall("SetRealReg(QString, QString, QString, QString)", str_screen_no, str_code_list, str_fid_list,
+                         str_opt_type)
+        time.sleep(0.5)  # 요청 제한이 있기 때문에 딜레이를 줌
 
     def _on_receive_real_data(self, s_code, real_type, real_data):
         """
@@ -548,3 +573,69 @@ class Kiwoom(QAxWidget):
                 "(최우선)매수호가": top_priority_bid,
                 "누적거래량": accum_volume
             })
+
+    def check_and_get_universe(self, strategy_name, universe_dict, now):
+        universe = {}  # {'code': {'code_name': _, 'percent': _ } , ... }
+        # KOSPI(0)에 상장된 모든 종목 코드를 가져와 kospi_code_list에 저장
+        kospi_code_list = self.get_code_list_by_market("0")
+        # KOSDAQ(10)에 상장된 모든 종목 코드를 가져와 kosdaq_code_list에 저장
+        kosdaq_code_list = self.get_code_list_by_market("10")
+        for code in kospi_code_list + kosdaq_code_list:
+            # 모든 종목 코드를 바탕으로 반복문 수행
+            code_name = self.get_master_code_name(code)
+            # 얻어온 종목명이 유니버스에 포함되어 있다면 딕셔너리에 추가
+            if code_name in universe_dict['name']:
+                universe_dict['code'].append(code)
+        # 코드, 종목명, 생성일자자를 열로 가지는 DaaFrame 생성
+        universe_df = pd.DataFrame({
+            'code': universe_dict['code'],
+            'code_name': universe_dict['name'],
+            'category': universe_dict['category'],
+            'percent': universe_dict['percent'],
+            'created_at': [now] * len(universe_dict['percent'])
+        })
+        insert_df_to_db(strategy_name, 'universe', universe_df)
+
+    def check_and_get_price_data(self, strategy_name, universe, code):
+        code_name = universe[code]['code_name']
+        # (1)케이스: 일봉 데이터가 아예 없는지 확인(장 종료 이후)
+        if check_transaction_closed() and not check_table_exist(strategy_name, code_name):
+            # API를 이용해 조회한 가격 데이터 price_df에 저장
+            price_df = self.get_price_data(code)
+            # 코드를 테이블 이름으로 해서 데이터베이스에 저장
+            insert_df_to_db(strategy_name, code_name, price_df)
+        else:
+            # (2), (3), (4) 케이스: 일봉 데이터가 있는 경우
+            # (2)케이스: 장이 종료된 경우 API를 이용해 얻어온 데이터를 저장
+            if check_transaction_closed():
+                # 저장된 데이터의 가장 최근 일자를 조회
+                ## index가 가장 큰 데이터를 가져오는데, 어떻게 현재 날짜랑 비교하지?
+                ## 정답은: get_price_data에서 얻어온 데이터를 데이터베이스에 저장할 때, index에 날짜를 저장하기 때문
+                sql = "select max(`{}`) from `{}`".format('index', code_name)
+
+                cur = execute_sql(strategy_name, sql)
+
+                # 일봉 데이터를 저장한 가장 최근 일자를 조회
+                last_date = cur.fetchone()
+
+                # 오늘 날짜를 20210101 형태로 지정
+                now = datetime.now().strftime("%Y%m%d")
+
+                # 최근 저장 일자가 오늘이 아닌지 확인
+                if last_date[0] != now:
+                    price_df = self.get_price_data(code)
+                    # 코드를 테이블 이름으로 해서 데이터베이스에 저장
+                    insert_df_to_db(strategy_name, code_name, price_df)
+
+            # (3), (4) 케이스: 장 시작 전이거나 장 중인 경우 데이터베이스에 저장된 데이터 조회
+            else:
+                sql = "select * from `{}`".format(code_name)
+                cur = execute_sql(strategy_name, sql)
+                cols = [column[0] for column in cur.description]  # ['index' , 'open', 'high', 'low', 'close', 'volume']
+
+                # 데이터베이스에서 조회한 데이터를 DataFrame으로 변환해서 저장
+                price_df = pd.DataFrame.from_records(data=cur.fetchall(), columns=cols)
+                price_df = price_df.set_index('index')
+                # 가격 데이터를 self.universe에서 접근할 수 있도록 저장
+                universe[code]['price_df'] = price_df
+        return universe

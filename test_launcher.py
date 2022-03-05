@@ -1,7 +1,6 @@
 from api.Kiwoom import *
 from api.KiwoomWorld import *
 import sys
-
 """
 - QApplication
     - PyQt5 를 이용하여 API 를 제어하는 메인 루프
@@ -9,7 +8,6 @@ import sys
 """
 app = QApplication(sys.argv)
 kiwoom_world = KiwoomWorld()
-
 
 # # kospi code list/code_name 를 받겠다.
 # get_kospi_code_list = False

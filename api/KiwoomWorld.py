@@ -13,7 +13,9 @@ from util.const import *
             - 응용 프로그램끼리 데이터를 공유하고 제어할 수 있도록 개발한 기술
 """
 
+
 class KiwoomWorld(QAxWidget):
+
     def __init__(self):
         """
         - QAxWidget
@@ -137,7 +139,7 @@ class KiwoomWorld(QAxWidget):
                 - "FIREW_SECGB" : 방화벽 설정 여부 반환 (0: 미설정 / 1: 설정 / 2: 해지)
         """
         account_list = self.dynamicCall("GetLoginInfo(QString)", tag)  # tag로 전달한 요청에 대한 응답을 받아옴
-        account_number = account_list.split(';')[0] # TODO: 국내 가상 계좌만 있다고 가장한 코드
+        account_number = account_list.split(';')[0]  # TODO: 국내 가상 계좌만 있다고 가장한 코드
         print('account_list:', account_list)
         print('account_number:', account_number)
         return account_number
@@ -198,14 +200,14 @@ class KiwoomWorld(QAxWidget):
             self.tr_event_loop.exec_()
 
             for key, val in self.tr_data.items():
-                ohlcv[key] += val # ohlcv[key][-1:] = val
+                ohlcv[key] += val  # ohlcv[key][-1:] = val
         """
         DataFrame
             - 행과 열을 가진 자료 구조
         """
         df = pd.DataFrame(ohlcv, columns=['open', 'high', 'low', 'close', 'volume'], index=ohlcv['date'])
 
-        return df[::-1] # 날짜 뒤집기
+        return df[::-1]  # 날짜 뒤집기
 
     def _on_receive_tr_data(self, screen_no, rqname, trcode, record_name, next, unused1, unused2, unused3, unused4):
         """
@@ -256,17 +258,20 @@ class KiwoomWorld(QAxWidget):
         # 오늘 주문 정보 불러오기 (다음 장 거래 시작일 전까지 유효)
         # get_order
         elif rqname == "opt10075_req":
-            for i in range(tr_data_cnt): # tr_data_cnt: 데이터 개수
+            for i in range(tr_data_cnt):  # tr_data_cnt: 데이터 개수
                 code = self.dynamicCall("GetCommData(QString, QString, int, QString", trcode, rqname, i, "종목코드")
                 code_name = self.dynamicCall("GetCommData(QString, QString, int, QString", trcode, rqname, i, "종목명")
                 order_number = self.dynamicCall("GetCommData(QString, QString, int, QString", trcode, rqname, i, "주문번호")
                 order_status = self.dynamicCall("GetCommData(QString, QString, int, QString", trcode, rqname, i, "주문상태")
-                order_quantity = self.dynamicCall("GetCommData(QString, QString, int, QString", trcode, rqname, i, "주문수량")
+                order_quantity = self.dynamicCall("GetCommData(QString, QString, int, QString", trcode, rqname, i,
+                                                  "주문수량")
                 order_price = self.dynamicCall("GetCommData(QString, QString, int, QString", trcode, rqname, i, "주문가격")
                 current_price = self.dynamicCall("GetCommData(QString, QString, int, QString", trcode, rqname, i, "현재가")
                 order_type = self.dynamicCall("GetCommData(QString, QString, int, QString", trcode, rqname, i, "주문구분")
-                left_quantity = self.dynamicCall("GetCommData(QString, QString, int, QString", trcode, rqname, i, "미체결수량")
-                executed_quantity = self.dynamicCall("GetCommData(QString, QString, int, QString", trcode, rqname, i, "체결량")
+                left_quantity = self.dynamicCall("GetCommData(QString, QString, int, QString", trcode, rqname, i,
+                                                 "미체결수량")
+                executed_quantity = self.dynamicCall("GetCommData(QString, QString, int, QString", trcode, rqname, i,
+                                                     "체결량")
                 ordered_at = self.dynamicCall("GetCommData(QString, QString, int, QString", trcode, rqname, i, "시간")
                 fee = self.dynamicCall("GetCommData(QString, QString, int, QString", trcode, rqname, i, "당일매매수수료")
                 tax = self.dynamicCall("GetCommData(QString, QString, int, QString", trcode, rqname, i, "당일매매세금")
@@ -312,11 +317,15 @@ class KiwoomWorld(QAxWidget):
                 code = self.dynamicCall("GetCommData(QString, QString, int, QString", trcode, rqname, i, "종목번호")
                 code_name = self.dynamicCall("GetCommData(QString, QString, int, QString", trcode, rqname, i, "종목명")
                 quantity = self.dynamicCall("GetCommData(QString, QString, int, QString", trcode, rqname, i, "보유수량")
-                purchase_price = self.dynamicCall("GetCommData(QString, QString, int, QString", trcode, rqname, i, "매입가")
-                return_rate = self.dynamicCall("GetCommData(QString, QString, int, QString", trcode, rqname, i, "수익률(%)")
+                purchase_price = self.dynamicCall("GetCommData(QString, QString, int, QString", trcode, rqname, i,
+                                                  "매입가")
+                return_rate = self.dynamicCall("GetCommData(QString, QString, int, QString", trcode, rqname, i,
+                                               "수익률(%)")
                 current_price = self.dynamicCall("GetCommData(QString, QString, int, QString", trcode, rqname, i, "현재가")
-                total_purchase_price = self.dynamicCall("GetCommData(QString, QString, int, QString", trcode, rqname, i,"매입금액")
-                available_quantity = self.dynamicCall("GetCommData(QString, QString, int, QString", trcode, rqname, i,"매매가능수량")
+                total_purchase_price = self.dynamicCall("GetCommData(QString, QString, int, QString", trcode, rqname, i,
+                                                        "매입금액")
+                available_quantity = self.dynamicCall("GetCommData(QString, QString, int, QString", trcode, rqname, i,
+                                                      "매매가능수량")
 
                 # 데이터 형변환 및 가공
                 code = code.strip()[1:]
@@ -353,14 +362,22 @@ class KiwoomWorld(QAxWidget):
         """
         self.dynamicCall("SetInputValue(QString, QString)", "계좌번호", self.account_number)
         self.dynamicCall("SetInputValue(QString, QString)", "비밀번호입력매체구분", "00")
-        self.dynamicCall("SetInputValue(QString, QString)", "조회구분", "2") # 2: 일반조회 / 3: 추정조회
+        self.dynamicCall("SetInputValue(QString, QString)", "조회구분", "2")  # 2: 일반조회 / 3: 추정조회
         # 사용자 구분 명 / TR 이름 / 연속 조회 여부 = 0 / 화면 번호
         self.dynamicCall("CommRqData(QString, QString, int, QString)", "opw00001_req", "opw00001", 0, "0002")
         # 코드 응답을 대기
         self.tr_event_loop.exec_()
         return self.tr_data
 
-    def send_order(self, rqname, screen_no, order_type, code, order_quantity, order_price, order_classification, origin_order_number=""):
+    def send_order(self,
+                   rqname,
+                   screen_no,
+                   order_type,
+                   code,
+                   order_quantity,
+                   order_price,
+                   order_classification,
+                   origin_order_number=""):
         """
         # rqname: send_buy_order: rqname
         # screen_no: '1001' : 화면 번호
@@ -387,7 +404,11 @@ class KiwoomWorld(QAxWidget):
             - OnReceiveChejanData: 주문 접수/체결
             - OnReceiveTrData
         """
-        order_result = self.dynamicCall("SendOrder(QString, QString, QString, int, QString, int, int, QString, QString)",[rqname, screen_no, self.account_number, order_type, code, order_quantity, order_price,order_classification, origin_order_number])
+        order_result = self.dynamicCall(
+            "SendOrder(QString, QString, QString, int, QString, int, int, QString, QString)", [
+                rqname, screen_no, self.account_number, order_type, code, order_quantity, order_price,
+                order_classification, origin_order_number
+            ])
         return order_result
 
     def _on_receive_msg(self, screen_no, rqname, trcode, msg):
@@ -431,7 +452,7 @@ class KiwoomWorld(QAxWidget):
                 data = data.strip().lstrip('+').lstrip('-')
 
                 # 수신한 데이터는 전부 문자형인데 문자형 중에 숫자인 항목들(ex:매수가)은 숫자로 변형이 필요함
-                if data.isdigit(): # 문자열이 숫자로 구성되어 있는지 확인합니다.
+                if data.isdigit():  # 문자열이 숫자로 구성되어 있는지 확인합니다.
                     data = int(data)
 
                 # fid 코드에 해당하는 항목(item_name)을 찾음(ex: fid=9201 > item_name=계좌번호)
@@ -443,7 +464,7 @@ class KiwoomWorld(QAxWidget):
                 # 접수/체결(s_gubun=0)이면 self.order, 잔고이동이면 self.balance에 값을 저장
                 if int(s_gubun) == 0:
                     # 아직 order에 종목코드가 없다면 신규 생성하는 과정
-                    if code not in self.order.keys(): # # 키: 종목 코드 / 값: 해당 종목의 주문 정보
+                    if code not in self.order.keys():  # # 키: 종목 코드 / 값: 해당 종목의 주문 정보
                         self.order[code] = {}
                     # order 딕셔너리에 데이터 저장
                     # {'007700': {주문가: '~~', '주문 번호': '~~' , 주문 상태: '~~', 미체결 수량" '~~'}, ...}
@@ -487,7 +508,7 @@ class KiwoomWorld(QAxWidget):
         """
         self.dynamicCall("SetInputValue(QString, QString)", "계좌번호", self.account_number)
         self.dynamicCall("SetInputValue(QString, QString)", "비밀번호입력매체구분", "00")
-        self.dynamicCall("SetInputValue(QString, QString)", "조회구분", "1") # 1: 합산 # 2: 개별
+        self.dynamicCall("SetInputValue(QString, QString)", "조회구분", "1")  # 1: 합산 # 2: 개별
         self.dynamicCall("CommRqData(QString, QString, int, QString)", "opw00018_req", "opw00018", 0, "0002")
 
         self.tr_event_loop.exec_()
@@ -509,8 +530,9 @@ class KiwoomWorld(QAxWidget):
             - 한 번에 등록 가능한 종목과 FID 개수는 100종목, 100개 입니다.
 
         """
-        self.dynamicCall("SetRealReg(QString, QString, QString, QString)", str_screen_no, str_code_list, str_fid_list, str_opt_type)
-        time.sleep(0.5) # 요청 제한이 있기 때문에 딜레이를 줌
+        self.dynamicCall("SetRealReg(QString, QString, QString, QString)", str_screen_no, str_code_list, str_fid_list,
+                         str_opt_type)
+        time.sleep(0.5)  # 요청 제한이 있기 때문에 딜레이를 줌
 
     def _on_receive_real_data(self, s_code, real_type, real_data):
         """

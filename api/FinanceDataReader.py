@@ -1,10 +1,10 @@
-from PyQt5.QAxContainer import *
-from PyQt5.QtWidgets import *
-from PyQt5.QtCore import *
 import time
 import pandas as pd
 from util.const import *
+from util.db_helper import *
 import FinanceDataReader as fdr
+import datetime
+from util.notifier import *
 """
 - PyQt
     - FinanceDataReader API 는 ActiveX Control인 OCX 방식으로 API 연결을 제공
@@ -15,7 +15,7 @@ import FinanceDataReader as fdr
 """
 
 class FinanceDataReader:
-    def __init__(self):
+    def __init__(self, market_type_list):
         """
         - QAxWidget
             - open API 를 사용할 수 있도록 연결
@@ -32,24 +32,39 @@ class FinanceDataReader:
         # 실시간 채결 정보를 저장할 딕셔너리
         # 키: 종목 코드 / 값: 해당 종목의 정보
         self.universe_realtime_transaction_info = {}
-        nasdaq_code_list = self.get_df_list_by_market('NASDAQ')
-        kospi_code_list = self.get_df_list_by_market('NYSE')
+        self.market_type_list = market_type_list
 
-    def _make_kiwoom_instance(self):
+    def get_code_list_of_market_by_crawling(self):
         """
-        - Objectives
-            - 우리 컴퓨터에서 키움 API 를 사용할 수 있도록 설정
-            - 로그인 / 주식 부분 /  TR 요청
-
-        - setControl
-            - PyQt5.QAxContainer.py 안 QAxWidget 클래스 내부 메서드
-
-        - "KFOPENAPI.KFOpenAPICtrl.1"
-            - 키움증권 웹 사이트에 접속하여 Open API를 설치하면 우리 컴퓨터에 설치되는 API 식별자 (프로그램 ID / ProgID)
-            - Open API를 설치한 컴퓨터라면 레지스트리에 모두 동일한 이름으로 저장
-        - 해외랑 국내랑 다름!!
+        Objectives
+            - 특정 market의 code list를 받는다.
+        # TODO: market_type 을 바꿔가며 전략을 만들자.
+        Parameter: market_type("_")
+            'S&P500',
+            'NASDAQ',
+            'NYSE',
+            'AMEX',
+            'SSE',
+            'SZSE',
+            'HKEX',
+            'TSE',
+            'HOSE',
+            'KRX',
+            'KOSPI',
+            'KOSDAQ',
+            'KONEX'
+            'KRX-DELISTING',
+            'KRX-MARCAP',
+            'KRX-ADMINISTRATIVE'
+            'ETF/KR'
+            'ETF/US'
         """
-        self.setControl("KFOPENAPI.KFOpenAPICtrl.1")
+        for market_type in self.market_type_list:
+            if not check_table_exist('code_lists', market_type):
+                if not isinstance(market_type, str):
+                    market_type = str(market_type)
+                market_name_df = fdr.StockListing(market_type)
+                insert_df_to_db('code_lists', market_type, market_name_df)
 
     def _login_slot(self, err_code):
         """
@@ -81,7 +96,7 @@ class FinanceDataReader:
                 - "FIREW_SECGB" : 방화벽 설정 여부 반환 (0: 미설정 / 1: 설정 / 2: 해지)
         """
         account_list = self.dynamicCall("GetLoginInfo(QString)", tag)  # tag로 전달한 요청에 대한 응답을 받아옴
-        account_number = account_list.split(';')[0] # TODO: 국내 가상 계좌만 있다고 가장한 코드
+        account_number = account_list.split(';')[0]  # TODO: 국내 가상 계좌만 있다고 가장한 코드
         print('account_list:', account_list)
         print('account_number:', account_number)
         return account_number
@@ -124,14 +139,14 @@ class FinanceDataReader:
             self.tr_event_loop.exec_()
 
             for key, val in self.tr_data.items():
-                ohlcv[key] += val # ohlcv[key][-1:] = val
+                ohlcv[key] += val  # ohlcv[key][-1:] = val
         """
         DataFrame
             - 행과 열을 가진 자료 구조
         """
         df = pd.DataFrame(ohlcv, columns=['open', 'high', 'low', 'close', 'volume'], index=ohlcv['date'])
 
-        return df[::-1] # 날짜 뒤집기
+        return df[::-1]  # 날짜 뒤집기
 
     def _on_receive_tr_data(self, screen_no, rqname, trcode, record_name, next, unused1, unused2, unused3, unused4):
         """
@@ -182,17 +197,20 @@ class FinanceDataReader:
         # 오늘 주문 정보 불러오기 (다음 장 거래 시작일 전까지 유효)
         # get_order
         elif rqname == "opt10075_req":
-            for i in range(tr_data_cnt): # tr_data_cnt: 데이터 개수
+            for i in range(tr_data_cnt):  # tr_data_cnt: 데이터 개수
                 code = self.dynamicCall("GetCommData(QString, QString, int, QString", trcode, rqname, i, "종목코드")
                 code_name = self.dynamicCall("GetCommData(QString, QString, int, QString", trcode, rqname, i, "종목명")
                 order_number = self.dynamicCall("GetCommData(QString, QString, int, QString", trcode, rqname, i, "주문번호")
                 order_status = self.dynamicCall("GetCommData(QString, QString, int, QString", trcode, rqname, i, "주문상태")
-                order_quantity = self.dynamicCall("GetCommData(QString, QString, int, QString", trcode, rqname, i, "주문수량")
+                order_quantity = self.dynamicCall("GetCommData(QString, QString, int, QString", trcode, rqname, i,
+                                                  "주문수량")
                 order_price = self.dynamicCall("GetCommData(QString, QString, int, QString", trcode, rqname, i, "주문가격")
                 current_price = self.dynamicCall("GetCommData(QString, QString, int, QString", trcode, rqname, i, "현재가")
                 order_type = self.dynamicCall("GetCommData(QString, QString, int, QString", trcode, rqname, i, "주문구분")
-                left_quantity = self.dynamicCall("GetCommData(QString, QString, int, QString", trcode, rqname, i, "미체결수량")
-                executed_quantity = self.dynamicCall("GetCommData(QString, QString, int, QString", trcode, rqname, i, "체결량")
+                left_quantity = self.dynamicCall("GetCommData(QString, QString, int, QString", trcode, rqname, i,
+                                                 "미체결수량")
+                executed_quantity = self.dynamicCall("GetCommData(QString, QString, int, QString", trcode, rqname, i,
+                                                     "체결량")
                 ordered_at = self.dynamicCall("GetCommData(QString, QString, int, QString", trcode, rqname, i, "시간")
                 fee = self.dynamicCall("GetCommData(QString, QString, int, QString", trcode, rqname, i, "당일매매수수료")
                 tax = self.dynamicCall("GetCommData(QString, QString, int, QString", trcode, rqname, i, "당일매매세금")
@@ -238,11 +256,15 @@ class FinanceDataReader:
                 code = self.dynamicCall("GetCommData(QString, QString, int, QString", trcode, rqname, i, "종목번호")
                 code_name = self.dynamicCall("GetCommData(QString, QString, int, QString", trcode, rqname, i, "종목명")
                 quantity = self.dynamicCall("GetCommData(QString, QString, int, QString", trcode, rqname, i, "보유수량")
-                purchase_price = self.dynamicCall("GetCommData(QString, QString, int, QString", trcode, rqname, i, "매입가")
-                return_rate = self.dynamicCall("GetCommData(QString, QString, int, QString", trcode, rqname, i, "수익률(%)")
+                purchase_price = self.dynamicCall("GetCommData(QString, QString, int, QString", trcode, rqname, i,
+                                                  "매입가")
+                return_rate = self.dynamicCall("GetCommData(QString, QString, int, QString", trcode, rqname, i,
+                                               "수익률(%)")
                 current_price = self.dynamicCall("GetCommData(QString, QString, int, QString", trcode, rqname, i, "현재가")
-                total_purchase_price = self.dynamicCall("GetCommData(QString, QString, int, QString", trcode, rqname, i,"매입금액")
-                available_quantity = self.dynamicCall("GetCommData(QString, QString, int, QString", trcode, rqname, i,"매매가능수량")
+                total_purchase_price = self.dynamicCall("GetCommData(QString, QString, int, QString", trcode, rqname, i,
+                                                        "매입금액")
+                available_quantity = self.dynamicCall("GetCommData(QString, QString, int, QString", trcode, rqname, i,
+                                                      "매매가능수량")
 
                 # 데이터 형변환 및 가공
                 code = code.strip()[1:]
@@ -272,7 +294,15 @@ class FinanceDataReader:
         # 0.2초에 한번 데이터를 요청할 수 있지만, 여기서는 여유 있게 0.5초의 대기 시잔을 두었다.
         time.sleep(0.5)
 
-    def send_order(self, rqname, screen_no, order_type, code, order_quantity, order_price, order_classification, origin_order_number=""):
+    def send_order(self,
+                   rqname,
+                   screen_no,
+                   order_type,
+                   code,
+                   order_quantity,
+                   order_price,
+                   order_classification,
+                   origin_order_number=""):
         """
         # rqname: send_buy_order: rqname
         # screen_no: '1001' : 화면 번호
@@ -299,7 +329,11 @@ class FinanceDataReader:
             - OnReceiveChejanData: 주문 접수/체결
             - OnReceiveTrData
         """
-        order_result = self.dynamicCall("SendOrder(QString, QString, QString, int, QString, int, int, QString, QString)",[rqname, screen_no, self.account_number, order_type, code, order_quantity, order_price,order_classification, origin_order_number])
+        order_result = self.dynamicCall(
+            "SendOrder(QString, QString, QString, int, QString, int, int, QString, QString)", [
+                rqname, screen_no, self.account_number, order_type, code, order_quantity, order_price,
+                order_classification, origin_order_number
+            ])
         return order_result
 
     def _on_receive_msg(self, screen_no, rqname, trcode, msg):
@@ -309,35 +343,6 @@ class FinanceDataReader:
             - 입력 값 오류 / 주문 전송 시 거부 사유 등을 확인 가능
         """
         print("[FinanceDataReader] _on_receive_msg is called {} / {} / {} / {}".format(screen_no, rqname, trcode, msg))
-
-    def get_df_list_by_market(self, market_type):
-        """
-        Objectives
-            - 특정 market의 code list를 받는다.
-        # TODO: market_type 을 바꿔가며 전략을 만들자.
-        Parameter: market_type("_")
-            - KRX
-            - KOSPI
-            - KOSDAQ
-            - NASDAQ
-            - NYSE: 뉴욕 증권거래소 종목
-            - AMEX
-            - SP500
-
-
-            - KS11 : KOSPI 지수
-            - KQ11: KOSDAQ 지수
-            - DJI : 다우존스 지수
-            - IXIC: 나스닥 종합 지수
-            - US500: S&P 500 지수
-            -
-        """
-        if not isinstance(market_type, str):
-            market_type = str(market_type)
-        df_market = fdr.StockListing(market_type)
-        df_market.head()
-        return df_market
-
 
     def _on_chejan_slot(self, s_gubun, n_item_cnt, s_fid_list):
         """
@@ -372,7 +377,7 @@ class FinanceDataReader:
                 data = data.strip().lstrip('+').lstrip('-')
 
                 # 수신한 데이터는 전부 문자형인데 문자형 중에 숫자인 항목들(ex:매수가)은 숫자로 변형이 필요함
-                if data.isdigit(): # 문자열이 숫자로 구성되어 있는지 확인합니다.
+                if data.isdigit():  # 문자열이 숫자로 구성되어 있는지 확인합니다.
                     data = int(data)
 
                 # fid 코드에 해당하는 항목(item_name)을 찾음(ex: fid=9201 > item_name=계좌번호)
@@ -384,7 +389,7 @@ class FinanceDataReader:
                 # 접수/체결(s_gubun=0)이면 self.order, 잔고이동이면 self.balance에 값을 저장
                 if int(s_gubun) == 0:
                     # 아직 order에 종목코드가 없다면 신규 생성하는 과정
-                    if code not in self.order.keys(): # # 키: 종목 코드 / 값: 해당 종목의 주문 정보
+                    if code not in self.order.keys():  # # 키: 종목 코드 / 값: 해당 종목의 주문 정보
                         self.order[code] = {}
                     # order 딕셔너리에 데이터 저장
                     # {'007700': {주문가: '~~', '주문 번호': '~~' , 주문 상태: '~~', 미체결 수량" '~~'}, ...}
@@ -423,8 +428,9 @@ class FinanceDataReader:
             - 한 번에 등록 가능한 종목과 FID 개수는 100종목, 100개 입니다.
 
         """
-        self.dynamicCall("SetRealReg(QString, QString, QString, QString)", str_screen_no, str_code_list, str_fid_list, str_opt_type)
-        time.sleep(0.5) # 요청 제한이 있기 때문에 딜레이를 줌
+        self.dynamicCall("SetRealReg(QString, QString, QString, QString)", str_screen_no, str_code_list, str_fid_list,
+                         str_opt_type)
+        time.sleep(0.5)  # 요청 제한이 있기 때문에 딜레이를 줌
 
     def _on_receive_real_data(self, s_code, real_type, real_data):
         """
@@ -461,7 +467,6 @@ class FinanceDataReader:
             accum_volume = abs(int(accum_volume))
 
             # print(s_code, signed_at, close, high, open, low, top_priority_ask, top_priority_bid, accum_volume)
-
             # universe_realtime_transaction_info 딕셔너리에 종목코드가 키값으로 존재하지 않는다면 생성(해당 종목 실시간 데이터 최초 수신시)
             if s_code not in self.universe_realtime_transaction_info:
                 self.universe_realtime_transaction_info.update({s_code: {}})
@@ -477,3 +482,107 @@ class FinanceDataReader:
                 "(최우선)매수호가": top_priority_bid,
                 "누적거래량": accum_volume
             })
+
+    def make_universe_table_at_db(self, strategy_name, universe_data_dict, now):
+        """
+        :param strategy_name:
+        :param universe_data_dict:
+        :param now:
+        :param only_abroad:
+        :return:
+
+        Objectives
+            - FinanceDataReader 로 부터 code(Symbol) 찾기
+            -
+        """
+
+        for code in universe_data_dict['code']:
+            for market_type in self.market_type_list:
+                sql = "select Name from '{}' where Symbol='{}'".format(market_type, code)
+                cur = execute_sql('code_lists', sql)
+                name = cur.fetchall()
+                if len(name) > 0:
+                    universe_data_dict['name'].append(name[0][0])
+                    break
+        universe_df = pd.DataFrame({
+            'code': universe_data_dict['code'],
+            'code_name': universe_data_dict['name'],
+            'country': universe_data_dict['country'],
+            'category': universe_data_dict['category'],
+            'nominal_percent': universe_data_dict['nominal_percent'],
+            'created_at': [now] * len(universe_data_dict['nominal_percent']),
+            'abs_mmt': [None] * len(universe_data_dict['nominal_percent']),
+            'rel_mmt': [None] * len(universe_data_dict['nominal_percent']),
+            'have': [0] * len(universe_data_dict['nominal_percent']),
+            'have_percent': [0] * len(universe_data_dict['nominal_percent']),
+            'mmt_month': ['0'] * len(universe_data_dict['nominal_percent'])
+        })
+        insert_df_to_db(strategy_name, 'universe', universe_df)
+
+    def get_price_data_by_crawling_and_make_db(self,
+                                               strategy_db_name,
+                                               universe_data_dict,
+                                               code,
+                                               duration_year=2,
+                                               close_only=False):
+        """
+        :param strategy_db_name:
+        :param universe_data_dict:
+        :param code:
+        :param duration_year:
+        :param close_only:
+        :return:
+
+        Objectives
+            - get 2 years data by crawling (with code)
+            - put new price data into strategy db (by "code" table)
+        """
+        code_name = universe_data_dict[code]['code_name']
+        date = datetime.datetime.now().date()
+        year = int(date.strftime("%Y"))
+        past_year = str(year - duration_year)
+        price_df = fdr.DataReader(code, past_year)
+        price_df = price_df[::-1]
+        if close_only:
+            price_df = price_df.reset_index()
+            del price_df['Open']
+            del price_df['High']
+            del price_df['Low']
+            del price_df['Volume']
+            del price_df['Change']
+            price_df['Date'] = price_df['Date'].astype(str).str[:10]
+        universe_data_dict[code]['price_df'] = price_df
+        code_as_table_name = code_name
+        # table이 없었으면?
+        if not check_table_exist(strategy_db_name, code_as_table_name):
+            if close_only:
+                insert_df_to_db(strategy_db_name, code_as_table_name, price_df, index=False)
+            else:
+                insert_df_to_db(strategy_db_name, code_as_table_name, price_df)
+            send_message('[CREATE PRICE DB OF UNIVERSE]\n\n\n' + str(code_name), LINE_MESSAGE_TOKEN)
+        # table 이 있었으면?
+        else:
+            sql = "select max(`{}`) from `{}`".format('Date', code_name)
+
+            cur = execute_sql(strategy_db_name, sql)
+
+            # 일봉 데이터를 저장한 가장 최근 일자를 조회
+            last_date_from_db = cur.fetchone()
+
+            # 오늘 날짜를 20210101 형태로 지정
+            # 2022-03-03 00:00:00
+            last_date_from_new_data = str(price_df.index.tolist()[0])
+            """
+            last_date_from_db: ('2022-03-04 00:00:00',)
+            last_date_from_db[0]: 2022-03-04 00:00:00
+            last_date_from_db[0][:10]: 2022-03-04
+            
+            last_date_from_new_data: 2022-03-03 00:00:00
+            last_date_from_new_data[:10]: 2022-03-03
+            """
+            # db 마지막 날짜(+시간)와 data 마지막 날짜(+시간)가 다르먼:
+            if last_date_from_db[0] != last_date_from_new_data:  # last_date_from_db[0][:10] != now and
+                insert_df_to_db(strategy_db_name, code_name, price_df)
+                send_message('[날짜가 지나서 -> UPDATE PRICE DB OF UNIVERSE]\n\n\n' + str(code_name), LINE_MESSAGE_TOKEN)
+
+        return universe_data_dict
