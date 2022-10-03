@@ -1,41 +1,30 @@
-from PyQt5.QAxContainer import *
-from PyQt5.QtWidgets import *
-from PyQt5.QtCore import *
 import time
 import pandas as pd
 from util.const import *
 from util.db_helper import *
-from util.time_helper import *
+import FinanceDataReader as fdr
+import datetime
+from util.notifier import *
 """
 - PyQt
-    - Kiwoom API 는 ActiveX Control인 OCX 방식으로 API 연결을 제공
+    - FinanceDataReader API 는 ActiveX Control인 OCX 방식으로 API 연결을 제공
     - 우리도 OCX 방식으로 API를 이용해야 함
         - OCX
             - OLE(Object Linking and Embedding) 을 제어할 수 있는 controller
             - 응용 프로그램끼리 데이터를 공유하고 제어할 수 있도록 개발한 기술
 """
 
-
-class Kiwoom(QAxWidget):
-
-    def __init__(self):
+class FinanceDataReader:
+    def __init__(self, market_type_list):
         """
         - QAxWidget
             - open API 를 사용할 수 있도록 연결
         """
         super().__init__()
-        # 우리 컴퓨터에서 키움 API 를 사용할 수 있도록 설정
-        self._make_kiwoom_instance()
         # API로 보내는 요청들을 받아올 slot을 등록하는 함수
-        self._set_signal_slots()
-        # 로그인 요청 보내기
-        self._comm_connect()
         # 내 계좌 번호 받아오기 -> self.account_number
-        self.account_number = self.get_account_number()
-
+        # self.account_number = self.get_account_number()
         # tr 요청에 대한 응답 대기를 위한 변수
-        self.tr_event_loop = QEventLoop()
-
         # 키: 종목 코드 / 값: 해당 종목의 주문 정보
         self.order = {}
         # 키: 종목 코드 / 값: 해당 종목의 매수 정보
@@ -43,73 +32,53 @@ class Kiwoom(QAxWidget):
         # 실시간 채결 정보를 저장할 딕셔너리
         # 키: 종목 코드 / 값: 해당 종목의 정보
         self.universe_realtime_transaction_info = {}
+        self.market_type_list = market_type_list
 
-    def _make_kiwoom_instance(self):
+    def get_code_list_of_market_by_crawling(self):
         """
-        - Objectives
-            - 우리 컴퓨터에서 키움 API 를 사용할 수 있도록 설정
-            - 로그인 / 주식 부분 /  TR 요청
-
-        - setControl
-            - PyQt5.QAxContainer.py 안 QAxWidget 클래스 내부 메서드
-
-        - "KHOPENAPI.KHOpenAPICtrl.1"
-            - 키움증권 웹 사이트에 접속하여 Open API를 설치하면 우리 컴퓨터에 설치되는 API 식별자 (프로그램 ID / ProgID)
-            - Open API를 설치한 컴퓨터라면 레지스트리에 모두 동일한 이름으로 저장
+        Objectives
+            - 특정 market의 code list를 받는다.
+        # TODO: market_type 을 바꿔가며 전략을 만들자.
+        Parameter: market_type("_")
+            'S&P500',
+            'NASDAQ',
+            'NYSE',
+            'AMEX',
+            'SSE',
+            'SZSE',
+            'HKEX',
+            'TSE',
+            'HOSE',
+            'KRX',
+            'KOSPI',
+            'KOSDAQ',
+            'KONEX'
+            'KRX-DELISTING',
+            'KRX-MARCAP',
+            'KRX-ADMINISTRATIVE'
+            'ETF/KR'
+            'ETF/US'
         """
-        self.setControl("KHOPENAPI.KHOpenAPICtrl.1")
-
-    def _set_signal_slots(self):
-        """
-        - Objectives
-            - API로 보내는 요청들을 받아올 slot을 등록하는 함수
-        - 로그인
-            - OnEventConnect.connect
-                - 로그인 응답 처리를 받을 때 사용하는 slot 함수는 _login_slot 이다.
-
-        """
-        # 로그인 응답의 결과를 _on_login_connect을 통해 받도록 설정
-        self.OnEventConnect.connect(self._login_slot)
-
-        # TR의 응답 결과를 _on_receive_tr_data 함수를 통해 받도록 설정
-        self.OnReceiveTrData.connect(self._on_receive_tr_data)
-
-        # TR/주문 메시지를 _on_receive_msg을 통해 받도록 설정
-        self.OnReceiveMsg.connect(self._on_receive_msg)
-
-        # 주문 접수/체결 결과를 _on_chejan_slot을 통해 받도록 설정
-        self.OnReceiveChejanData.connect(self._on_chejan_slot)
-
-        # 실시간 체결 데이터를 _on_receive_real_data을 통해 받도록 설정
-        # SetRealReg() 함수로 등록한 실시간 데이터도 이 이벤트로 전달됩니다.
-        # GetCommRealData() 함수를 사용해서 수신된 데이터를 얻을 수 있습니다.
-        self.OnReceiveRealData.connect(self._on_receive_real_data)
+        for market_type in self.market_type_list:
+            if not check_table_exist('code_lists', market_type):
+                if not isinstance(market_type, str):
+                    market_type = str(market_type)
+                market_name_df = fdr.StockListing(market_type)
+                insert_df_to_db('code_lists', market_type, market_name_df)
 
     def _login_slot(self, err_code):
+        """
+        :param err_code:
+        :return:
+
+        # _comm_connect
+        """
         if err_code == 0:
             print("connected")
         else:
             print("not connected")
 
         self.login_event_loop.exit()
-
-    def _comm_connect(self):
-        """
-        - Objectives
-            - 로그인 요청 신호를 보낸 이후, 응답 대기를 설정하는 함수
-
-            - dynamicCall
-                - PyQt5.QAxContainer.py 안 QAxWidget 클래스 내부 메서드
-                - API 서버로 로그인 요청을 보냄
-                - "CommConnect()"
-                    - API 에서 제공하는 함수
-                    - 키움증권 로그인 화면을 팝업하는 기능
-        """
-        self.dynamicCall("CommConnect()")
-
-        # 동기화 처리를 위함 (로그인 될 때까지 기다리기)
-        self.login_event_loop = QEventLoop()
-        self.login_event_loop.exec_()
 
     def get_account_number(self, tag="ACCNO"):
         """
@@ -132,31 +101,11 @@ class Kiwoom(QAxWidget):
         print('account_number:', account_number)
         return account_number
 
-    def get_code_list_by_market(self, market_type):
-        """
-        Objectives
-            - 특정 market의 code list를 받는다.
-        # TODO: market_type 을 바꿔가며 전략을 만들자.
-        Parameter: market_type("_")
-            - 0: 코스피
-            - 10: 코스닥
-            - 3: ELW
-            - 8: ETF
-            - 50: KONEX
-            - 4: 뮤츄얼 펀드
-            - 5: 신주인수권
-            - 6: 리츠
-            - 9: 하이얼펀드
-            - 30: K-OTC
-        """
-        code_list = self.dynamicCall("GetCodeListByMarket(QString)", market_type)
-        code_list = code_list.split(';')[:-1]
-        return code_list
-
     def get_master_code_name(self, code):
         """
         Objectives
             - 특정 code의 종목명을 받는다.
+            - 종목명을 그냥 입력해도 될듯함
         """
         code_name = self.dynamicCall("GetMasterCodeName(QString)", code)
         return code_name
@@ -166,6 +115,8 @@ class Kiwoom(QAxWidget):
         Objectives
             - 종목의 상장일부터 가장 최근 일자까지 일봉 정보를 가져오는 함수
             - TODO: "기준 일자" 를 이용하여, 주식 상장일 ~ 기준 일자 의 데이터를 받아올 수도 있다.
+            - TODO: 가격 정보가 적혀있는 excel 데이터로 불러오기
+            - TODO: 어떻게 하면, 최신 데이터를 불러올 수 있을까?
         """
         self.dynamicCall("SetInputValue(QString, QString)", "종목코드", code)
         self.dynamicCall("SetInputValue(QString, QString)", "기준일자", date)
@@ -209,7 +160,7 @@ class Kiwoom(QAxWidget):
             - next: 연속 조회 유무를 판단하는 값 ( 0: 연속(추가 조회) 데이터 없음 / 2: 연속(추가 조회) 데이터 있음 )
             - unused1, unused2, unused3, unused4
         """
-        print("[Kiwoom] _on_receive_tr_data is called {} / {} / {}".format(screen_no, rqname, trcode))
+        print("[FinanceDataReader] _on_receive_tr_data is called {} / {} / {}".format(screen_no, rqname, trcode))
         # 이번 요청에서 받아 온 데이터 개수(tr_data_cnt) 확인 요청
         tr_data_cnt = self.dynamicCall("GetRepeatCnt(QString, QString)", trcode, rqname)
 
@@ -343,20 +294,6 @@ class Kiwoom(QAxWidget):
         # 0.2초에 한번 데이터를 요청할 수 있지만, 여기서는 여유 있게 0.5초의 대기 시잔을 두었다.
         time.sleep(0.5)
 
-    def get_deposit(self):
-        """
-        Objectives
-            - 조회 대상 계좌의 예수금을 얻어오는 함수
-        """
-        self.dynamicCall("SetInputValue(QString, QString)", "계좌번호", self.account_number)
-        self.dynamicCall("SetInputValue(QString, QString)", "비밀번호입력매체구분", "00")
-        self.dynamicCall("SetInputValue(QString, QString)", "조회구분", "2")  # 2: 일반조회 / 3: 추정조회
-        # 사용자 구분 명 / TR 이름 / 연속 조회 여부 = 0 / 화면 번호
-        self.dynamicCall("CommRqData(QString, QString, int, QString)", "opw00001_req", "opw00001", 0, "0002")
-        # 코드 응답을 대기
-        self.tr_event_loop.exec_()
-        return self.tr_data
-
     def send_order(self,
                    rqname,
                    screen_no,
@@ -405,7 +342,7 @@ class Kiwoom(QAxWidget):
             - TR 조희 응답 및 주문에 대한 메시지를 수신
             - 입력 값 오류 / 주문 전송 시 거부 사유 등을 확인 가능
         """
-        print("[Kiwoom] _on_receive_msg is called {} / {} / {} / {}".format(screen_no, rqname, trcode, msg))
+        print("[FinanceDataReader] _on_receive_msg is called {} / {} / {} / {}".format(screen_no, rqname, trcode, msg))
 
     def _on_chejan_slot(self, s_gubun, n_item_cnt, s_fid_list):
         """
@@ -425,7 +362,7 @@ class Kiwoom(QAxWidget):
         Objectives
             - 주문 전송 후, 주문 접수 / 채결 통보 / 잔고 통보를 수신할 때마다 발생 합니다.
         """
-        print("[Kiwoom] _on_chejan_slot is called {} / {} / {}".format(s_gubun, n_item_cnt, s_fid_list))
+        print("[FinanceDataReader] _on_chejan_slot is called {} / {} / {}".format(s_gubun, n_item_cnt, s_fid_list))
 
         # 9201;9203;9205;9001;912;913;302;900;901;처럼 전달되는 fid 리스트를 ';' 기준으로 구분함
         for fid in s_fid_list.split(";"):
@@ -474,33 +411,6 @@ class Kiwoom(QAxWidget):
         elif int(s_gubun) == 1:
             print("* 잔고 출력(self.balance)")
             print(self.balance)
-
-    def get_order(self):
-        """
-        Objectives
-         - 주문 정보를 불러 오는 함수
-        """
-        self.dynamicCall("SetInputValue(QString, QString)", "계좌번호", self.account_number)
-        self.dynamicCall("SetInputValue(QString, QString)", "전체종목구분", "0")
-        self.dynamicCall("SetInputValue(QString, QString)", "체결구분", "0")  # 0:전체, 1:미체결, 2:체결
-        self.dynamicCall("SetInputValue(QString, QString)", "매매구분", "0")  # 0:전체, 1:매도, 2:매수
-        self.dynamicCall("CommRqData(QString, QString, int, QString)", "opt10075_req", "opt10075", 0, "0002")
-        # 응답 대기 상태
-        self.tr_event_loop.exec_()
-        return self.tr_data
-
-    def get_balance(self):
-        """
-        Objectives
-            - 잔고 얻어 오기 (구매한 종목들 확인)
-        """
-        self.dynamicCall("SetInputValue(QString, QString)", "계좌번호", self.account_number)
-        self.dynamicCall("SetInputValue(QString, QString)", "비밀번호입력매체구분", "00")
-        self.dynamicCall("SetInputValue(QString, QString)", "조회구분", "1")  # 1: 합산 # 2: 개별
-        self.dynamicCall("CommRqData(QString, QString, int, QString)", "opw00018_req", "opw00018", 0, "0002")
-
-        self.tr_event_loop.exec_()
-        return self.tr_data
 
     def set_real_reg(self, str_screen_no, str_code_list, str_fid_list, str_opt_type):
         """
@@ -557,7 +467,6 @@ class Kiwoom(QAxWidget):
             accum_volume = abs(int(accum_volume))
 
             # print(s_code, signed_at, close, high, open, low, top_priority_ask, top_priority_bid, accum_volume)
-
             # universe_realtime_transaction_info 딕셔너리에 종목코드가 키값으로 존재하지 않는다면 생성(해당 종목 실시간 데이터 최초 수신시)
             if s_code not in self.universe_realtime_transaction_info:
                 self.universe_realtime_transaction_info.update({s_code: {}})
@@ -574,68 +483,106 @@ class Kiwoom(QAxWidget):
                 "누적거래량": accum_volume
             })
 
-    def check_and_get_universe(self, strategy_name, universe_dict, now):
-        universe = {}  # {'code': {'code_name': _, 'percent': _ } , ... }
-        # KOSPI(0)에 상장된 모든 종목 코드를 가져와 kospi_code_list에 저장
-        kospi_code_list = self.get_code_list_by_market("0")
-        # KOSDAQ(10)에 상장된 모든 종목 코드를 가져와 kosdaq_code_list에 저장
-        kosdaq_code_list = self.get_code_list_by_market("10")
-        for code in kospi_code_list + kosdaq_code_list:
-            # 모든 종목 코드를 바탕으로 반복문 수행
-            code_name = self.get_master_code_name(code)
-            # 얻어온 종목명이 유니버스에 포함되어 있다면 딕셔너리에 추가
-            if code_name in universe_dict['name']:
-                universe_dict['code'].append(code)
-        # 코드, 종목명, 생성일자자를 열로 가지는 DaaFrame 생성
+    def make_universe_table_at_db(self, strategy_name, universe_data_dict, now):
+        """
+        :param strategy_name:
+        :param universe_data_dict:
+        :param now:
+        :param only_abroad:
+        :return:
+
+        Objectives
+            - FinanceDataReader 로 부터 code(Symbol) 찾기
+            -
+        """
+
+        for code in universe_data_dict['code']:
+            for market_type in self.market_type_list:
+                sql = "select Name from '{}' where Symbol='{}'".format(market_type, code)
+                cur = execute_sql('code_lists', sql)
+                name = cur.fetchall()
+                if len(name) > 0:
+                    universe_data_dict['name'].append(name[0][0])
+                    break
         universe_df = pd.DataFrame({
-            'code': universe_dict['code'],
-            'code_name': universe_dict['name'],
-            'category': universe_dict['category'],
-            'percent': universe_dict['percent'],
-            'created_at': [now] * len(universe_dict['percent'])
+            'code': universe_data_dict['code'],
+            'code_name': universe_data_dict['name'],
+            'country': universe_data_dict['country'],
+            'category': universe_data_dict['category'],
+            'nominal_percent': universe_data_dict['nominal_percent'],
+            'created_at': [now] * len(universe_data_dict['nominal_percent']),
+            'abs_mmt': [None] * len(universe_data_dict['nominal_percent']),
+            'rel_mmt': [None] * len(universe_data_dict['nominal_percent']),
+            'have': [0] * len(universe_data_dict['nominal_percent']),
+            'have_percent': [0] * len(universe_data_dict['nominal_percent']),
+            'mmt_month': ['0'] * len(universe_data_dict['nominal_percent'])
         })
         insert_df_to_db(strategy_name, 'universe', universe_df)
 
-    def check_and_get_price_data(self, strategy_name, universe, code):
-        code_name = universe[code]['code_name']
-        # (1)케이스: 일봉 데이터가 아예 없는지 확인(장 종료 이후)
-        if check_transaction_closed() and not check_table_exist(strategy_name, code_name):
-            # API를 이용해 조회한 가격 데이터 price_df에 저장
-            price_df = self.get_price_data(code)
-            # 코드를 테이블 이름으로 해서 데이터베이스에 저장
-            insert_df_to_db(strategy_name, code_name, price_df)
-        else:
-            # (2), (3), (4) 케이스: 일봉 데이터가 있는 경우
-            # (2)케이스: 장이 종료된 경우 API를 이용해 얻어온 데이터를 저장
-            if check_transaction_closed():
-                # 저장된 데이터의 가장 최근 일자를 조회
-                ## index가 가장 큰 데이터를 가져오는데, 어떻게 현재 날짜랑 비교하지?
-                ## 정답은: get_price_data에서 얻어온 데이터를 데이터베이스에 저장할 때, index에 날짜를 저장하기 때문
-                sql = "select max(`{}`) from `{}`".format('index', code_name)
+    def get_price_data_by_crawling_and_make_db(self,
+                                               strategy_db_name,
+                                               universe_data_dict,
+                                               code,
+                                               duration_year=2,
+                                               close_only=False):
+        """
+        :param strategy_db_name:
+        :param universe_data_dict:
+        :param code:
+        :param duration_year:
+        :param close_only:
+        :return:
 
-                cur = execute_sql(strategy_name, sql)
-
-                # 일봉 데이터를 저장한 가장 최근 일자를 조회
-                last_date = cur.fetchone()
-
-                # 오늘 날짜를 20210101 형태로 지정
-                now = datetime.now().strftime("%Y%m%d")
-
-                # 최근 저장 일자가 오늘이 아닌지 확인
-                if last_date[0] != now:
-                    price_df = self.get_price_data(code)
-                    # 코드를 테이블 이름으로 해서 데이터베이스에 저장
-                    insert_df_to_db(strategy_name, code_name, price_df)
-
-            # (3), (4) 케이스: 장 시작 전이거나 장 중인 경우 데이터베이스에 저장된 데이터 조회
+        Objectives
+            - get 2 years data by crawling (with code)
+            - put new price data into strategy db (by "code" table)
+        """
+        code_name = universe_data_dict[code]['code_name']
+        date = datetime.datetime.now().date()
+        year = int(date.strftime("%Y"))
+        past_year = str(year - duration_year)
+        price_df = fdr.DataReader(code, past_year)
+        price_df = price_df[::-1]
+        if close_only:
+            price_df = price_df.reset_index()
+            del price_df['Open']
+            del price_df['High']
+            del price_df['Low']
+            del price_df['Volume']
+            del price_df['Change']
+            price_df['Date'] = price_df['Date'].astype(str).str[:10]
+        universe_data_dict[code]['price_df'] = price_df
+        code_as_table_name = code_name
+        # table이 없었으면?
+        if not check_table_exist(strategy_db_name, code_as_table_name):
+            if close_only:
+                insert_df_to_db(strategy_db_name, code_as_table_name, price_df, index=False)
             else:
-                sql = "select * from `{}`".format(code_name)
-                cur = execute_sql(strategy_name, sql)
-                cols = [column[0] for column in cur.description]  # ['index' , 'open', 'high', 'low', 'close', 'volume']
+                insert_df_to_db(strategy_db_name, code_as_table_name, price_df)
+            send_message('[CREATE PRICE DB OF UNIVERSE]\n\n\n' + str(code_name), LINE_MESSAGE_TOKEN)
+        # table 이 있었으면?
+        else:
+            sql = "select max(`{}`) from `{}`".format('Date', code_name)
 
-                # 데이터베이스에서 조회한 데이터를 DataFrame으로 변환해서 저장
-                price_df = pd.DataFrame.from_records(data=cur.fetchall(), columns=cols)
-                price_df = price_df.set_index('index')
-                # 가격 데이터를 self.universe에서 접근할 수 있도록 저장
-                universe[code]['price_df'] = price_df
-        return universe
+            cur = execute_sql(strategy_db_name, sql)
+
+            # 일봉 데이터를 저장한 가장 최근 일자를 조회
+            last_date_from_db = cur.fetchone()
+
+            # 오늘 날짜를 20210101 형태로 지정
+            # 2022-03-03 00:00:00
+            last_date_from_new_data = str(price_df.index.tolist()[0])
+            """
+            last_date_from_db: ('2022-03-04 00:00:00',)
+            last_date_from_db[0]: 2022-03-04 00:00:00
+            last_date_from_db[0][:10]: 2022-03-04
+            
+            last_date_from_new_data: 2022-03-03 00:00:00
+            last_date_from_new_data[:10]: 2022-03-03
+            """
+            # db 마지막 날짜(+시간)와 data 마지막 날짜(+시간)가 다르먼:
+            if last_date_from_db[0] != last_date_from_new_data:  # last_date_from_db[0][:10] != now and
+                insert_df_to_db(strategy_db_name, code_name, price_df)
+                send_message('[날짜가 지나서 -> UPDATE PRICE DB OF UNIVERSE]\n\n\n' + str(code_name), LINE_MESSAGE_TOKEN)
+
+        return universe_data_dict

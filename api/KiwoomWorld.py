@@ -4,11 +4,9 @@ from PyQt5.QtCore import *
 import time
 import pandas as pd
 from util.const import *
-from util.db_helper import *
-from util.time_helper import *
 """
 - PyQt
-    - Kiwoom API 는 ActiveX Control인 OCX 방식으로 API 연결을 제공
+    - KiwoomWorld API 는 ActiveX Control인 OCX 방식으로 API 연결을 제공
     - 우리도 OCX 방식으로 API를 이용해야 함
         - OCX
             - OLE(Object Linking and Embedding) 을 제어할 수 있는 controller
@@ -16,7 +14,7 @@ from util.time_helper import *
 """
 
 
-class Kiwoom(QAxWidget):
+class KiwoomWorld(QAxWidget):
 
     def __init__(self):
         """
@@ -31,7 +29,7 @@ class Kiwoom(QAxWidget):
         # 로그인 요청 보내기
         self._comm_connect()
         # 내 계좌 번호 받아오기 -> self.account_number
-        self.account_number = self.get_account_number()
+        # self.account_number = self.get_account_number()
 
         # tr 요청에 대한 응답 대기를 위한 변수
         self.tr_event_loop = QEventLoop()
@@ -53,11 +51,13 @@ class Kiwoom(QAxWidget):
         - setControl
             - PyQt5.QAxContainer.py 안 QAxWidget 클래스 내부 메서드
 
+        - "KFOPENAPI.KFOpenAPICtrl.1"
         - "KHOPENAPI.KHOpenAPICtrl.1"
             - 키움증권 웹 사이트에 접속하여 Open API를 설치하면 우리 컴퓨터에 설치되는 API 식별자 (프로그램 ID / ProgID)
             - Open API를 설치한 컴퓨터라면 레지스트리에 모두 동일한 이름으로 저장
+        - 해외랑 국내랑 다름!!
         """
-        self.setControl("KHOPENAPI.KHOpenAPICtrl.1")
+        self.setControl("KFOPENAPI.KFOpenAPICtrl.1")
 
     def _set_signal_slots(self):
         """
@@ -68,24 +68,31 @@ class Kiwoom(QAxWidget):
                 - 로그인 응답 처리를 받을 때 사용하는 slot 함수는 _login_slot 이다.
 
         """
-        # 로그인 응답의 결과를 _on_login_connect을 통해 받도록 설정
+        # 로그인 응답의 결과를 _on_login_connect을 통해 받도록 설정 # _comm_connect
         self.OnEventConnect.connect(self._login_slot)
 
+        #
         # TR의 응답 결과를 _on_receive_tr_data 함수를 통해 받도록 설정
         self.OnReceiveTrData.connect(self._on_receive_tr_data)
 
         # TR/주문 메시지를 _on_receive_msg을 통해 받도록 설정
         self.OnReceiveMsg.connect(self._on_receive_msg)
-
-        # 주문 접수/체결 결과를 _on_chejan_slot을 통해 받도록 설정
-        self.OnReceiveChejanData.connect(self._on_chejan_slot)
-
-        # 실시간 체결 데이터를 _on_receive_real_data을 통해 받도록 설정
-        # SetRealReg() 함수로 등록한 실시간 데이터도 이 이벤트로 전달됩니다.
-        # GetCommRealData() 함수를 사용해서 수신된 데이터를 얻을 수 있습니다.
-        self.OnReceiveRealData.connect(self._on_receive_real_data)
+        #
+        # # 주문 접수/체결 결과를 _on_chejan_slot을 통해 받도록 설정
+        # self.OnReceiveChejanData.connect(self._on_chejan_slot)
+        #
+        # # 실시간 체결 데이터를 _on_receive_real_data을 통해 받도록 설정
+        #     # SetRealReg() 함수로 등록한 실시간 데이터도 이 이벤트로 전달됩니다.
+        #     # GetCommRealData() 함수를 사용해서 수신된 데이터를 얻을 수 있습니다.
+        # self.OnReceiveRealData.connect(self._on_receive_real_data)
 
     def _login_slot(self, err_code):
+        """
+        :param err_code:
+        :return:
+
+        # _comm_connect
+        """
         if err_code == 0:
             print("connected")
         else:
@@ -104,8 +111,13 @@ class Kiwoom(QAxWidget):
                 - "CommConnect()"
                     - API 에서 제공하는 함수
                     - 키움증권 로그인 화면을 팝업하는 기능
+            입력값  0 – 버전 수동처리, 1 – 버전 자동처리
+                *로그인창 및 OCX 파일을 버전처리 받는 경우에,
+                수동처리시, 고객 프로그램(ocx포함)을 직접 수동으로 Close하고 버전처리 진행
+                자동처리시, 고객 프로그램(ocx포함)을 자동으로 Close하고 버전처리 및 자동
+                재실행을 함.
         """
-        self.dynamicCall("CommConnect()")
+        self.dynamicCall("CommConnect(1)")
 
         # 동기화 처리를 위함 (로그인 될 때까지 기다리기)
         self.login_event_loop = QEventLoop()
@@ -209,7 +221,7 @@ class Kiwoom(QAxWidget):
             - next: 연속 조회 유무를 판단하는 값 ( 0: 연속(추가 조회) 데이터 없음 / 2: 연속(추가 조회) 데이터 있음 )
             - unused1, unused2, unused3, unused4
         """
-        print("[Kiwoom] _on_receive_tr_data is called {} / {} / {}".format(screen_no, rqname, trcode))
+        print("[KiwoomWorld] _on_receive_tr_data is called {} / {} / {}".format(screen_no, rqname, trcode))
         # 이번 요청에서 받아 온 데이터 개수(tr_data_cnt) 확인 요청
         tr_data_cnt = self.dynamicCall("GetRepeatCnt(QString, QString)", trcode, rqname)
 
@@ -405,7 +417,7 @@ class Kiwoom(QAxWidget):
             - TR 조희 응답 및 주문에 대한 메시지를 수신
             - 입력 값 오류 / 주문 전송 시 거부 사유 등을 확인 가능
         """
-        print("[Kiwoom] _on_receive_msg is called {} / {} / {} / {}".format(screen_no, rqname, trcode, msg))
+        print("[KiwoomWorld] _on_receive_msg is called {} / {} / {} / {}".format(screen_no, rqname, trcode, msg))
 
     def _on_chejan_slot(self, s_gubun, n_item_cnt, s_fid_list):
         """
@@ -425,7 +437,7 @@ class Kiwoom(QAxWidget):
         Objectives
             - 주문 전송 후, 주문 접수 / 채결 통보 / 잔고 통보를 수신할 때마다 발생 합니다.
         """
-        print("[Kiwoom] _on_chejan_slot is called {} / {} / {}".format(s_gubun, n_item_cnt, s_fid_list))
+        print("[KiwoomWorld] _on_chejan_slot is called {} / {} / {}".format(s_gubun, n_item_cnt, s_fid_list))
 
         # 9201;9203;9205;9001;912;913;302;900;901;처럼 전달되는 fid 리스트를 ';' 기준으로 구분함
         for fid in s_fid_list.split(";"):
@@ -573,69 +585,3 @@ class Kiwoom(QAxWidget):
                 "(최우선)매수호가": top_priority_bid,
                 "누적거래량": accum_volume
             })
-
-    def check_and_get_universe(self, strategy_name, universe_dict, now):
-        universe = {}  # {'code': {'code_name': _, 'percent': _ } , ... }
-        # KOSPI(0)에 상장된 모든 종목 코드를 가져와 kospi_code_list에 저장
-        kospi_code_list = self.get_code_list_by_market("0")
-        # KOSDAQ(10)에 상장된 모든 종목 코드를 가져와 kosdaq_code_list에 저장
-        kosdaq_code_list = self.get_code_list_by_market("10")
-        for code in kospi_code_list + kosdaq_code_list:
-            # 모든 종목 코드를 바탕으로 반복문 수행
-            code_name = self.get_master_code_name(code)
-            # 얻어온 종목명이 유니버스에 포함되어 있다면 딕셔너리에 추가
-            if code_name in universe_dict['name']:
-                universe_dict['code'].append(code)
-        # 코드, 종목명, 생성일자자를 열로 가지는 DaaFrame 생성
-        universe_df = pd.DataFrame({
-            'code': universe_dict['code'],
-            'code_name': universe_dict['name'],
-            'category': universe_dict['category'],
-            'percent': universe_dict['percent'],
-            'created_at': [now] * len(universe_dict['percent'])
-        })
-        insert_df_to_db(strategy_name, 'universe', universe_df)
-
-    def check_and_get_price_data(self, strategy_name, universe, code):
-        code_name = universe[code]['code_name']
-        # (1)케이스: 일봉 데이터가 아예 없는지 확인(장 종료 이후)
-        if check_transaction_closed() and not check_table_exist(strategy_name, code_name):
-            # API를 이용해 조회한 가격 데이터 price_df에 저장
-            price_df = self.get_price_data(code)
-            # 코드를 테이블 이름으로 해서 데이터베이스에 저장
-            insert_df_to_db(strategy_name, code_name, price_df)
-        else:
-            # (2), (3), (4) 케이스: 일봉 데이터가 있는 경우
-            # (2)케이스: 장이 종료된 경우 API를 이용해 얻어온 데이터를 저장
-            if check_transaction_closed():
-                # 저장된 데이터의 가장 최근 일자를 조회
-                ## index가 가장 큰 데이터를 가져오는데, 어떻게 현재 날짜랑 비교하지?
-                ## 정답은: get_price_data에서 얻어온 데이터를 데이터베이스에 저장할 때, index에 날짜를 저장하기 때문
-                sql = "select max(`{}`) from `{}`".format('index', code_name)
-
-                cur = execute_sql(strategy_name, sql)
-
-                # 일봉 데이터를 저장한 가장 최근 일자를 조회
-                last_date = cur.fetchone()
-
-                # 오늘 날짜를 20210101 형태로 지정
-                now = datetime.now().strftime("%Y%m%d")
-
-                # 최근 저장 일자가 오늘이 아닌지 확인
-                if last_date[0] != now:
-                    price_df = self.get_price_data(code)
-                    # 코드를 테이블 이름으로 해서 데이터베이스에 저장
-                    insert_df_to_db(strategy_name, code_name, price_df)
-
-            # (3), (4) 케이스: 장 시작 전이거나 장 중인 경우 데이터베이스에 저장된 데이터 조회
-            else:
-                sql = "select * from `{}`".format(code_name)
-                cur = execute_sql(strategy_name, sql)
-                cols = [column[0] for column in cur.description]  # ['index' , 'open', 'high', 'low', 'close', 'volume']
-
-                # 데이터베이스에서 조회한 데이터를 DataFrame으로 변환해서 저장
-                price_df = pd.DataFrame.from_records(data=cur.fetchall(), columns=cols)
-                price_df = price_df.set_index('index')
-                # 가격 데이터를 self.universe에서 접근할 수 있도록 저장
-                universe[code]['price_df'] = price_df
-        return universe
