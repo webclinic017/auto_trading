@@ -4,6 +4,7 @@ from util.const import *
 from util.db_helper import *
 import FinanceDataReader as fdr
 import datetime
+import numpy as np
 from util.notifier import *
 """
 - PyQt
@@ -14,7 +15,8 @@ from util.notifier import *
             - 응용 프로그램끼리 데이터를 공유하고 제어할 수 있도록 개발한 기술
 """
 
-class FinanceDataReader:
+
+class FinanceDataReaderClass:
     def __init__(self, market_type_list):
         """
         - QAxWidget
@@ -497,25 +499,31 @@ class FinanceDataReader:
         """
 
         for code in universe_data_dict['code']:
+            find_code = False
             for market_type in self.market_type_list:
                 sql = "select Name from '{}' where Symbol='{}'".format(market_type, code)
                 cur = execute_sql('code_lists', sql)
                 name = cur.fetchall()
                 if len(name) > 0:
                     universe_data_dict['name'].append(name[0][0])
+                    find_code = True
                     break
+            if find_code == False:
+                raise Exception('code 크롤링에 실패했습니다', code)
         universe_df = pd.DataFrame({
             'code': universe_data_dict['code'],
             'code_name': universe_data_dict['name'],
             'country': universe_data_dict['country'],
             'category': universe_data_dict['category'],
-            'nominal_percent': universe_data_dict['nominal_percent'],
+            'nominal_percent': np.round(universe_data_dict['nominal_percent'], 3),
             'created_at': [now] * len(universe_data_dict['nominal_percent']),
+            'fix_ratio': [None] * len(universe_data_dict['nominal_percent']),
             'abs_mmt': [None] * len(universe_data_dict['nominal_percent']),
             'rel_mmt': [None] * len(universe_data_dict['nominal_percent']),
             'have': [0] * len(universe_data_dict['nominal_percent']),
             'have_percent': [0] * len(universe_data_dict['nominal_percent']),
-            'mmt_month': ['0'] * len(universe_data_dict['nominal_percent'])
+            'mmt_month': ['0'] * len(universe_data_dict['nominal_percent']),
+            'data_len': [0] * len(universe_data_dict['nominal_percent'])
         })
         insert_df_to_db(strategy_name, 'universe', universe_df)
 
@@ -523,7 +531,7 @@ class FinanceDataReader:
                                                strategy_db_name,
                                                universe_data_dict,
                                                code,
-                                               duration_year=2,
+                                               duration_year=1,
                                                close_only=False):
         """
         :param strategy_db_name:
@@ -537,7 +545,6 @@ class FinanceDataReader:
             - get 2 years data by crawling (with code)
             - put new price data into strategy db (by "code" table)
         """
-        code_name = universe_data_dict[code]['code_name']
         date = datetime.datetime.now().date()
         year = int(date.strftime("%Y"))
         past_year = str(year - duration_year)
@@ -552,17 +559,19 @@ class FinanceDataReader:
             del price_df['Change']
             price_df['Date'] = price_df['Date'].astype(str).str[:10]
         universe_data_dict[code]['price_df'] = price_df
-        code_as_table_name = code_name
+        universe_data_dict[code]['data_len'] = len(price_df)
+        sql = "update universe set data_len=:data_len where code=:code"
+        execute_sql(strategy_db_name, sql, {"data_len": universe_data_dict[code]['data_len'], "code": code})
         # table이 없었으면?
-        if not check_table_exist(strategy_db_name, code_as_table_name):
+        if not check_table_exist(strategy_db_name, code):
             if close_only:
-                insert_df_to_db(strategy_db_name, code_as_table_name, price_df, index=False)
+                insert_df_to_db(strategy_db_name, code, price_df, index=False)
             else:
-                insert_df_to_db(strategy_db_name, code_as_table_name, price_df)
-            send_message('[CREATE PRICE DB OF UNIVERSE]\n\n\n' + str(code_name), LINE_MESSAGE_TOKEN)
+                insert_df_to_db(strategy_db_name, code, price_df)
+            send_message('[CREATE PRICE DB OF UNIVERSE]\n\n\n' + str(code), LINE_MESSAGE_TOKEN)
         # table 이 있었으면?
         else:
-            sql = "select max(`{}`) from `{}`".format('Date', code_name)
+            sql = "select max(`{}`) from `{}`".format('Date', code)
 
             cur = execute_sql(strategy_db_name, sql)
 
@@ -582,7 +591,7 @@ class FinanceDataReader:
             """
             # db 마지막 날짜(+시간)와 data 마지막 날짜(+시간)가 다르먼:
             if last_date_from_db[0] != last_date_from_new_data:  # last_date_from_db[0][:10] != now and
-                insert_df_to_db(strategy_db_name, code_name, price_df)
-                send_message('[날짜가 지나서 -> UPDATE PRICE DB OF UNIVERSE]\n\n\n' + str(code_name), LINE_MESSAGE_TOKEN)
+                insert_df_to_db(strategy_db_name, code, price_df)
+                send_message('[날짜가 지나서 -> UPDATE PRICE DB OF UNIVERSE]\n\n\n' + str(code), LINE_MESSAGE_TOKEN)
 
         return universe_data_dict

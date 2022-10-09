@@ -1,4 +1,4 @@
-from api.FinanceDataReader import *
+from api.FinanceDataReaderAPI import *
 from strategy.base_strategy import Base
 from util.parse_boolean import *
 from util.notifier import *
@@ -9,6 +9,24 @@ import traceback
 # bond: TLT / IEF / SHY / TIP / LQD / HYG / AGG / BWX / EMB
 # real_asset: VNQ / DBC /IAU
 universe_data_dict_lists = [{
+    'code': [
+        'SPY', 'QQQ', 'DIA', 'IWD', 'VTI', 'VEA', 'VWO', 'TLT', 'IEF', 'SHY', 'TIP', 'LQD', 'HYG', 'AGG', 'BWX', 'EMB',
+        'IAU', 'VNQ', 'DBC'
+    ],
+    'name': [],
+    'country': [
+        'abroad', 'abroad', 'abroad', 'abroad', 'abroad', 'abroad', 'abroad', 'abroad', 'abroad', 'abroad', 'abroad',
+        'abroad', 'abroad', 'abroad', 'abroad', 'abroad', 'abroad', 'abroad', 'abroad'
+    ],
+    'category': [
+        'stock', 'stock', 'stock', 'stock', 'stock', 'stock', 'stock', 'bond', 'bond', 'bond', 'bond', 'bond', 'bond',
+        'bond', 'bond', 'bond', 'real_asset', 'real_asset', 'real_asset'
+    ],
+    'nominal_percent': [
+        0.3 / 7., 0.3 / 7., 0.3 / 7., 0.3 / 7., 0.3 / 7., 0.3 / 7., 0.3 / 7., 0.55 / 9, 0.55 / 9, 0.55 / 9, 0.55 / 9,
+        0.55 / 9, 0.55 / 9, 0.55 / 9, 0.55 / 9, 0.55 / 9, 0.05, 0.05, 0.05
+    ],
+}, {
     'code': ['SPY', 'EFA', 'EDV', 'LTPZ', 'BLV', 'EMLC', 'IAU', 'VNQ', 'DBC'],
     'name': [],
     'country': ['abroad', 'abroad', 'abroad', 'abroad', 'abroad', 'abroad', 'abroad', 'abroad', 'abroad'],
@@ -31,7 +49,7 @@ universe_data_dict_lists = [{
 
 def set_configs(config):
     with config.namespace('universe'):
-        config.index = 1
+        config.index = 0
         with config.namespace('stock'):
             config.add_argument("--num_of_max_possess", default=3, type=int)
             config.fix_ratio = 'soft'
@@ -48,8 +66,8 @@ def set_configs(config):
             config.rel_enabled = True
             config.add_argument("--month_thres", default=[3, 6, 9], type=list)
         with config.namespace('bond'):
-            config.abs_enabled = False
-            config.rel_enabled = False
+            config.abs_enabled = True
+            config.rel_enabled = True
             config.add_argument("--month_thres", default=[3, 4, 5, 6], type=list)
         with config.namespace('real_asset'):
             config.abs_enabled = True
@@ -76,18 +94,16 @@ class ComprehensiveDualMmtStrategy(Base):
                 for code in self.universe_data_dict.keys():
                     category = self.universe_data_dict[code]['category']
                     self.write_month_for_price_mmt_in_db(code, category, dict_of_month_lists_for_price_mmt)
+                    self.write_fix_ratio_in_db(code, possess_num_dict_wrt_group[category]['fix_ratio'])
                     if possess_num_dict_wrt_group[category]['fix_ratio'] == 'hard':
-                        self.universe_data_dict[code]['abs_mmt'] = None
-                        self.universe_data_dict[code]['rel_mmt'] = None
                         self.universe_data_dict[code]['have'] = 1
                         self.universe_data_dict[code]['have_percent'] = \
-                        self.universe_data_dict[code][
-                            'nominal_percent']
-                    else:
-                        # 절대 모멘텀
-                        month_lists_for_price_mmt = dict_of_month_lists_for_price_mmt[category]
-                        dicts_for_pos_abs_mmt_wrt_group = self.calculate_and_write_abs_mmt_in_db(
-                            code, month_lists_for_price_mmt, dicts_for_pos_abs_mmt_wrt_group)
+                        round(self.universe_data_dict[code][
+                            'nominal_percent'], 3)
+                    # 절대 모멘텀
+                    month_lists_for_price_mmt = dict_of_month_lists_for_price_mmt[category]
+                    dicts_for_pos_abs_mmt_wrt_group = self.calculate_and_write_abs_mmt_in_db(
+                        code, month_lists_for_price_mmt, dicts_for_pos_abs_mmt_wrt_group)
 
                 # 상대 모멘텀
                 self.calculate_invest_stock_and_percent_wrt_rel_price_mmt(dicts_for_pos_abs_mmt_wrt_group,
