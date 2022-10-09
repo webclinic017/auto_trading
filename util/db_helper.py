@@ -1,5 +1,5 @@
 import sqlite3
-
+import pandas as pd
 
 def check_table_exist(db_name, table_name):
     """
@@ -61,6 +61,13 @@ def execute_sql(db_name, sql, param={}):
         cur.execute(sql, param)
         return cur
 
+def execute_sql_as_dataframe(db_name, sql):
+    """
+        sql = "select * from universe"
+    """
+    with sqlite3.connect('{}.db'.format(db_name)) as con:
+        df = pd.read_sql_query(sql, con)
+        return df
 
 if __name__ == "__main__":
     pass

@@ -10,7 +10,6 @@ from threading import Lock
 
 
 class AttrDict(dict):
-
     def __init__(self):
         super(AttrDict, self).__setattr__('_allow_new_entry_', True)
 
@@ -31,8 +30,7 @@ class AttrDict(dict):
             elif dest_ad and not src_ad:
                 raise ValueError('[ATConfig] AttrDict %s cannot be overwritten by other type %s' % (k, str(type(v))))
             elif not dest_ad and src_ad:
-                raise ValueError('[ATConfig] %s (Type %s) cannot be overwritten by an AttrDict' %
-                                 (k, str(type(dest))))
+                raise ValueError('[ATConfig] %s (Type %s) cannot be overwritten by an AttrDict' % (k, str(type(dest))))
         else:
             if not self._allow_new_entry_:
                 raise ValueError('[ATConfig] Cannot add a new entry \'%s\' into a locked AttrDict' % k)
@@ -50,7 +48,6 @@ class AttrDict(dict):
 
 
 class NamespaceContext:
-
     def __init__(self, target, name, on_cmd=False):
         self.target = target
         self.name = name
@@ -96,7 +93,6 @@ def recursive_entry_lock(target, value):
 
 
 class ATConfigLockContext:
-
     def __init__(self, target):
         self.target = target
 
@@ -155,7 +151,6 @@ ATConfig_supported_types_ = [
 
 
 class ATConfig(NestedNamespace):
-
     def __init__(self, conflict_handler='warning'):
         super().__setattr__('_lock_', Lock())
         self._conflict_handler_ = conflict_handler
@@ -223,8 +218,7 @@ class ATConfig(NestedNamespace):
                 elif self._conflict_handler_ == 'warning':
                     print('[ATConfig] WARNING : CLI argument %s has been overwritten!!' % a)
                 elif self._conflict_handler_ == 'ask':
-                    answer = input('[ATConfig] CLI argument %s has been overwritten! Do you want to continue?(y/n)' %
-                                   a)
+                    answer = input('[ATConfig] CLI argument %s has been overwritten! Do you want to continue?(y/n)' % a)
                     if answer == 'y':
                         pass
                     elif answer == 'n':
@@ -250,8 +244,7 @@ class ATConfig(NestedNamespace):
             print('[ATConfig] WARNING : numpy array type is not supported in config -> converted to list')
             target = target.tolist()
         elif type(target) in [tuple, set]:
-            print('[ATConfig] WARNING : %s type is not supported in config -> converted to list' %
-                  (str(type(target))))
+            print('[ATConfig] WARNING : %s type is not supported in config -> converted to list' % (str(type(target))))
             target = list(target)
 
         return target
@@ -356,8 +349,8 @@ class ATConfig(NestedNamespace):
                 yaml.dump(self._config_dict_, f)
                 f.close()
             else:
-                raise ValueError(
-                    '[ATConfig] Cannot export to a file with extention %s. (We support pkl, json, yaml)' % ext)
+                raise ValueError('[ATConfig] Cannot export to a file with extention %s. (We support pkl, json, yaml)' %
+                                 ext)
 
     def __str__(self):
         return str(self._config_dict_)
@@ -367,10 +360,8 @@ def get_default_config():
     config = ATConfig()
     with config.namespace('invest_amount'):
         config.add_argument("--total", default=0., type=float)
-        config.add_argument("--use_equal_ratio", required=False, default=True,
-                            type=parse_boolean)
-
+        config.add_argument("--use_equal_ratio", required=False, default=True, type=parse_boolean)
+    config.add_argument("--crawl_price_data", required=False, default=True, type=parse_boolean)
     # config.acc_actor_step = 0
-
 
     return config

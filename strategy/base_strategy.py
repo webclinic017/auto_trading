@@ -1,4 +1,4 @@
-from api.FinanceDataReader import *
+from api.FinanceDataReaderAPI import *
 from util.parse_boolean import *
 from util.db_helper import *
 from util.time_helper import *
@@ -32,8 +32,11 @@ class Base:
             self.universe_data_dict = self.check_and_get_universe(universe_data_dict)
 
             # 가격 정보를 조회, 필요하면 생성
-            self.get_price_data_by_crawling_and_make_db()
-            #
+            if self.p.crawl_price_data:
+                self.get_price_data_by_crawling_and_make_db()
+            else:
+                self.load_price_data_in_db()
+
             for code in self.universe_data_dict.keys():
                 self.write_current_price_in_db(code)
             self.is_init_success = True
@@ -59,18 +62,20 @@ class Base:
         cur = execute_sql(db_name, sql)
         db_universe_dict = cur.fetchall()  # fetchall: select 문의 결과 객체를 이용하여, 조회 결과 확인 가능
         for _, item in enumerate(db_universe_dict):
-            _, code, code_name, country, category, percent, created_at, abs_mmt, rel_mmt, have, have_percent, mmt_month = item
+            _, code, code_name, country, category, percent, created_at, fix_ratio, abs_mmt, rel_mmt, have, have_percent, mmt_month, data_len = item
             universe_data_dict[code] = {
                 'code_name': code_name,
                 'country': country,
                 'category': category,
-                'nominal_percent': percent,
+                'nominal_percent': round(percent, 3),
                 'created_at': created_at,
+                'fix_ratio': fix_ratio,
                 'abs_mmt': abs_mmt,
                 'rel_mmt': rel_mmt,
                 'have': have,
-                'have_percent': have_percent,
-                'mmt_month': mmt_month
+                'have_percent': round(have_percent, 3),
+                'mmt_month': mmt_month,
+                'data_len': data_len
             }
         # send_message('[UNIVERSE LIST] \n\n\n' + str(self.universe_data_dict), LINE_MESSAGE_TOKEN)
         return universe_data_dict
@@ -83,6 +88,12 @@ class Base:
             strategy_db_name = self.strategy_name
             self.universe_data_dict = self.finance_data_reader.get_price_data_by_crawling_and_make_db(
                 strategy_db_name, self.universe_data_dict, code)
+
+    def load_price_data_in_db(self):
+        for code in self.universe_data_dict.keys():
+            sql = "select * from '{}'".format(code)
+            data = execute_sql_as_dataframe(self.strategy_name, sql)
+            self.universe_data_dict[code]['price_df'] = data
 
     def calculate_invest_percent_wrt_group(self):
         dict_for_nominal_invest_percent_wrt_group = {'stock': 0., 'bond': 0., 'real_asset': 0.}
@@ -97,6 +108,10 @@ class Base:
             "mmt_month": str(dict_of_month_lists_for_price_mmt[category]),
             "code": code
         })
+
+    def write_fix_ratio_in_db(self, code, fix_ratio):
+        sql = "update universe set fix_ratio=:fix_ratio where code=:code"
+        execute_sql(self.strategy_name, sql, {"fix_ratio": str(fix_ratio), "code": code})
 
     def write_current_price_in_db(self, code):
         price_df = self.universe_data_dict[code]['price_df']['Close'].copy()
@@ -146,20 +161,16 @@ class Base:
             dicts_for_invest_code_list_wrt_group[category_name] = list(
                 dict_of_pos_abs_mmt_in_group.keys())[:possess_num_dict_wrt_group[category_name]['max']]
             for rel_mmt_rank, code_for_invest in enumerate(dicts_for_invest_code_list_wrt_group[category_name]):
-                print('----------------')
-                print('category_name:', category_name)
-                print('code_for_invest:', code_for_invest)
-                print('rel_mmt_rank:', rel_mmt_rank)
                 self.universe_data_dict[code_for_invest]['rel_mmt'] = rel_mmt_rank
                 if possess_num_dict_wrt_group[category_name]['fix_ratio'] == 'mixed':
                     self.universe_data_dict[code_for_invest]['have'] = 1
-                    self.universe_data_dict[code_for_invest]['have_percent'] = self.universe_data_dict[code_for_invest][
-                        'nominal_percent']
+                    self.universe_data_dict[code_for_invest]['have_percent'] = round(
+                        self.universe_data_dict[code_for_invest]['nominal_percent'], 3)
                 elif possess_num_dict_wrt_group[category_name]['fix_ratio'] == 'soft':
                     self.universe_data_dict[code_for_invest]['have'] = 1
                     unit_have_percent_wrt_group = dict_for_nominal_invest_percent_wrt_group[
                         category_name] / possess_num_dict_wrt_group[category_name]['max']
-                    self.universe_data_dict[code_for_invest]['have_percent'] = unit_have_percent_wrt_group
+                    self.universe_data_dict[code_for_invest]['have_percent'] = round(unit_have_percent_wrt_group, 3)
 
     def write_invest_stock_and_percent_in_db(self):
         for code in self.universe_data_dict.keys():
@@ -169,7 +180,7 @@ class Base:
             # update have_percent
             sql = "update universe set have_percent=:have_percent where code=:code"
             execute_sql(self.strategy_name, sql, {
-                "have_percent": self.universe_data_dict[code]['have_percent'],
+                "have_percent": round(self.universe_data_dict[code]['have_percent'], 3),
                 "code": code
             })
             # update rel_mmt

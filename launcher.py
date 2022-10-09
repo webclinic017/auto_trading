@@ -1,4 +1,4 @@
-from api.FinanceDataReader import *
+from api.FinanceDataReaderAPI import *
 from util.parse_boolean import *
 import importlib
 import inspect
@@ -9,8 +9,8 @@ def run_strategies(config):
     message = '-------[전략 코드 시작!]-------'
     send_message(message, LINE_MESSAGE_TOKEN)
     # markey type 에 있는 모든 종목 이름과 코드를 크롤링 한 후, 이를 db에 'code_lists' 로 저장합니다.
-    market_type_list = ['KRX', 'NASDAQ', 'NYSE', 'ETF/KR', 'ETF/US']
-    finance_data_reader = FinanceDataReader(market_type_list)
+    market_type_list = ['NASDAQ', 'NYSE', 'ETF/KR', 'ETF/US', 'ETF/major', 'ETF/bond']  # 'KRX'
+    finance_data_reader = FinanceDataReaderClass(market_type_list)
     finance_data_reader.get_code_list_of_market_by_crawling()
     print('[아래 market 들에 있는 모든 종목을 크롤링하여 DB에 저장합니다]\n' + str(market_type_list))
 
